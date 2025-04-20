@@ -50,7 +50,7 @@
         <span id="trapMaxUnitsVal" class="value-badge">16</span>
       </label>
       <label>Max valeur
-        <input type="range" id="maxValue" min="99" max="150" step="1" value="100">
+        <input type="range" id="maxValue" min="50" max="150" step="1" value="100">
         <span id="maxValueVal" class="value-badge">100</span>
       </label>
       <label>Probabilité d'avoir un nombre élévé
@@ -140,8 +140,8 @@
 
     /* ----- COULEURS DU TITRE ----- */
     function refreshHeaderColors(){
-      HEADER_BG=color(random(200,255),random(150,200),random(150,200));
-      HEADER_TEXT=color(random(150,255),random(50,150),random(100,150));
+      HEADER_BG=color(random(100,255),random(100,200),random(100,200));
+      HEADER_TEXT=color(random(100,255),random(50,255),random(100,255));
       const wrap=document.getElementById('topBarWrapper');
       if(wrap){wrap.style.backgroundColor=HEADER_BG.toString();}
       document.getElementById('topBar').style.color=HEADER_TEXT.toString();
@@ -179,7 +179,7 @@
     /* --------- DESSIN NUMÉRO -------- */
     function drawNumber(n,x,y,w,h){
       const tens=floor(n/10);let units=n%10;if(random()<TRAP_UNITS)units=int(random(10,TRAP_MAX_UNITS));
-      const barW=w*0.05,barH=h*0.55,square=w*0.04;
+      const barW=w*0.04,barH=h*0.45,square=w*0.04;
       const boxes=[],elements=[...Array(tens).fill({type:'bar'}),...Array(units).fill({type:'square'})];shuffle(elements);
       for(const el of elements){let placed=false,tries=0;while(!placed&&tries<600){tries++;const cx=random(x+12,x+w-12),cy=random(y+12,y+h-12);if(el.type==='bar'){const ang=random()<.5?random(-PI/12,PI/12):random(HALF_PI-PI/12,HALF_PI+PI/12);const bb=rotBBox(cx,cy,barW,barH,ang);if(inCell(bb,x,y,w,h)&&!overlapsAny(bb,boxes)){drawBar(cx,cy,barW,barH,ang);boxes.push(inflate(bb,4));placed=true;}}else{const bb={x:cx-square/2,y:cy-square/2,w:square,h:square};if(inCell(bb,x,y,w,h)&&!overlapsAny(bb,boxes)){drawSq(bb.x,bb.y,square);boxes.push(inflate(bb,4));placed=true;}}}}
     }
