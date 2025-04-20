@@ -1,222 +1,198 @@
 <!DOCTYPE html>
 <html lang="fr">
-  <head>
-    <meta charset="utf-8" />
-    <title>Bingo base‑10 en p5.js</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
-    <style>
-      body {
-        margin: 0;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        background: #fafafa;
-        font-family: sans-serif;
-        user-select: none;
-      }
-      h1 {
-        margin: 16px 0 8px;
-        font-size: 2.8rem;
-        color: #ff8d8d;
-      }
-      #saveBtn {
-        margin-top: 12px;
-        padding: 8px 20px;
-        font-size: 1rem;
-        background: #4c8bff;
-        color: white;
-        border: none;
-        border-radius: 6px;
-        cursor: pointer;
-        transition: background 0.2s;
-      }
-      #saveBtn:hover { background: #3573e6; }
-    </style>
-  </head>
-  <body>
-    <h1>BINGO DINGO</h1>
-    <button id="saveBtn">Télécharger l’image</button>
+<head>
+  <meta charset="utf-8" />
+  <title>Bingo base‑10 en p5.js</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+  <style>
+    @font-face{font-family:'Borel';src:url('font/Borel-Regular.otf') format('opentype');}
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:'Borel',sans-serif;background:#fafafa;line-height:1.4;}
+    a{color:#4c8bff;text-decoration:none;}
 
-    <script>
-      /* -----------------------------------------------------------------
-         Bingo « base‑10 » :
-         – Génération alternée :
-             • tirage n°1  → valeurs 50‑99 (inclus)
-             • tirage n°2  → valeurs  0‑99 (inclus)
-             • tirage n°3  → valeurs 50‑99 … etc.
-         – Barres verticales ou horizontales, jamais superposées.
-         – Pièges possibles : plus de 9 carrés (~25 %).
-         – Clic dans le canevas → nouvelle feuille.
-         – Clic sur « Télécharger l’image » → enregistre le PNG, sans régénération.
-       ----------------------------------------------------------------- */
+    /* Header */
+    #topBarWrapper{display:flex;align-items:center;justify-content:center;position:relative;width:100%;padding:20px 0;}
+    .back-link{position:absolute;left:20px;top:50%;transform:translateY(-50%);font-size:1rem;white-space:nowrap;}
+    #topBar{font-size:2.5rem;font-weight:bold;}
 
-      /* ----------------------- PARAMÈTRES GÉNÉRAUX -------------------- */
-      const COLS = 3;
-      const ROWS = 3;
-      const CELL_W = 280;
-      const CELL_H = 180;
-      const CANVAS_W = COLS * CELL_W;
-      const CANVAS_H = ROWS * CELL_H;
+    /* Layout */
+    .wrapper{display:flex;gap:40px;justify-content:center;align-items:flex-start;flex-wrap:wrap;padding:20px;max-width:1200px;margin:auto;}
+    .sidebar{display:flex;flex-direction:column;gap:16px;max-width:260px;flex:0 0 260px;align-items:center;}
+    .logoSidebar{width:200px;border-radius:12px;box-shadow:0 2px 4px rgba(0,0,0,0.15);}
+    .sidebar label{font-size:1rem;display:flex;flex-direction:column;gap:4px;width:100%;}
+    .sidebar input[type="range"],.sidebar input[type="color"]{width:100%;}
+    .value-badge{font-size:0.9rem;font-weight:bold;color:#333;margin-top:2px;align-self:flex-end;}
+    button{padding:10px;font-size:1rem;background:#4c8bff;color:#fff;border:none;border-radius:6px;cursor:pointer;transition:background .2s;width:100%;}
+    button:hover{background:#3573e6;}
 
-      const BORDER_MARGIN = 12;
-      const SPACING = 4;
-      const TRAP_CHANCE = 0.25;
+    .main{flex:1 1 840px;min-width:320px;display:flex;flex-direction:column;gap:20px;}
+    .description{font-size:1.1rem;color:#333;text-align:justify;max-width:840px;}
+    #canvasContainer{width:100%;}
+    canvas{max-width:100%;height:auto;}
 
-      /* ---------------------------- p5.js ----------------------------- */
-      let numbers = [];
-      let pg;
-      let toggleRange = false; // false → 50‑99, true → 0‑99
+    @media(max-width:768px){.wrapper{flex-direction:column;}.sidebar{max-width:none;flex:1 1 auto;}.main{order:2;}}
+  </style>
+</head>
+<body>
+  <div id="topBarWrapper"><a class="back-link" href="index.html">← Page précédente</a><div id="topBar">BINGO DINGO</div></div>
 
-      function setup() {
-        pg = createCanvas(CANVAS_W, CANVAS_H).parent(document.body);
-        noLoop();
+  <div class="wrapper">
+    <!-- Colonne gauche -->
+    <div class="sidebar">
+      <img src="logo.png" alt="Logo Élise" class="logoSidebar">
+      <label>Pourcentage de pièges (unités)
+        <input type="range" id="trapUnits" min="0" max="1" step="0.01" value="0.25">
+        <span id="trapUnitsVal" class="value-badge">25&nbsp;%</span>
+      </label>
+      <label>Max unités piégées
+        <input type="range" id="trapMaxUnits" min="10" max="25" step="1" value="16">
+        <span id="trapMaxUnitsVal" class="value-badge">16</span>
+      </label>
+      <label>Max valeur
+        <input type="range" id="maxValue" min="99" max="150" step="1" value="100">
+        <span id="maxValueVal" class="value-badge">100</span>
+      </label>
+      <label>Probabilité d'avoir un nombre élévé
+        <input type="range" id="highTens" min="0" max="1" step="0.01" value="0.50">
+        <span id="highTensVal" class="value-badge">50&nbsp;%</span>
+      </label>
+      <label>Couleur des unités <input type="color" id="squareColor" value="#4f26ee"></label>
+      <label>Couleur des dizaines <input type="color" id="barColor" value="#22b04c"></label>
+      <button id="refreshBtn">Actualiser la grille</button>
+      <button id="saveBtn">Télécharger la grille</button>
+    </div>
 
-        newCard();
-        pg.mousePressed(newCard);
+    <!-- Colonne droite -->
+    <div class="main">
+      <div class="description">
+        <p><strong>Bingo Dingo</strong> est un jeu pédagogique destiné à consolider la numération de 1&nbsp;à&nbsp;150. Les dizaines sont représentées par des barres vertes, les unités par des petits carrés violets. Des <em>pièges</em> (valeurs inattendues) s’intègrent aléatoirement pour inciter l’enfant à compter réellement plutôt qu’à deviner. Les contrôles ci‑contre permettent d’ajuster le pourcentage de pièges, le nombre maximal d’unités piégées, la valeur maximale tirée ainsi que les couleurs employées.</p>
+      </div>
+      <div id="canvasContainer"></div>
+    </div>
+  </div>
+  <!-- SCRIPT P5.js -->
+  <script>
+    /* ----- CONSTANTES DE GRILLE ----- */
+    const COLS=3, ROWS=3, CELL_W=280, CELL_H=180;
+    const CANVAS_W=COLS*CELL_W, CANVAS_H=ROWS*CELL_H+100;
+    let HIGH_TENS_PROB = 0.5;   // ← ajouter cette ligne
+    /* ----- PARAMÈTRES ----- */
+    let BAR_COLOR='#22b04c', SQUARE_COLOR='#4f26ee';
+    let TRAP_UNITS=0.25, TRAP_MAX_UNITS=16, MAX_VALUE=100;
 
-        document.getElementById('saveBtn').addEventListener('click', (e) => {
-          e.stopPropagation();
-          const ts = new Date().toISOString().replace(/[:.]/g, '-');
-          saveCanvas('bingo-' + ts, 'png');
-        });
-      }
+    /* ----- ÉTAT ----- */
+    let HEADER_BG, HEADER_TEXT, numbers=[], toggleRange=false, autoRefresh=true;
 
-      function draw() {
-        background(255);
-        drawGrid();
-        for (let r = 0; r < ROWS; r++) {
-          for (let c = 0; c < COLS; c++) {
-            drawNumber(numbers[r][c], c * CELL_W, r * CELL_H, CELL_W, CELL_H);
-          }
-        }
-      }
+    /* ----------- P5 SETUP ------------- */
+    function setup(){
+      const cnv=createCanvas(CANVAS_W,CANVAS_H);
+      cnv.parent(document.getElementById('canvasContainer'));
+      noLoop();
+      refreshHeaderColors();
+      attachUI();
+      newCard();
+    }
 
-      /* -------------------------- LOGIQUE ---------------------------- */
-      function newCard() {
-        generateCard();
-        redraw();
-      }
+    /* ---- UI LISTENERS & SÉCURITÉ ---- */
+    function attachUI(){
+  const $ = id => document.getElementById(id);
+  const canvasDiv = $('canvasContainer');
+  if (!canvasDiv) return;
 
-      function generateCard() {
-        const minVal = toggleRange ? 20 : 40;
-        // random(min, 100) retourne [min, 100) donc 0‑99 ou 50‑99 inclus
-        numbers = Array.from({ length: ROWS }, () =>
-          Array.from({ length: COLS }, () => int(random(minVal, 100)))
-        );
-        toggleRange = !toggleRange; // alterner au prochain tirage
-      }
+  // sliders + badges ----------
+  const sliders = [
+  ['trapUnits',  v => { TRAP_UNITS  = parseFloat(v);
+                      $('trapUnitsVal').textContent  = Math.round(v*100) + ' %'; }],
 
-      /* --------------------- DESSIN D’UN NOMBRE ---------------------- */
-      function drawNumber(n, x, y, w, h) {
-        const tens = floor(n / 10);
-        let units = n % 10;
-        if (random() < TRAP_CHANCE) units = int(random(10, 16));
+['trapMaxUnits', v => { TRAP_MAX_UNITS = parseInt(v);
+                        $('trapMaxUnitsVal').textContent = v; }],
 
-        const barW = w * 0.05;
-        const barH = h * 0.55;
-        const square = w * 0.04;
+['maxValue',  v => { MAX_VALUE = parseInt(v);
+                     $('maxValueVal').textContent = v; }],
 
-        const boxes = [];
-        const elements = [
-          ...Array(tens).fill({ type: 'bar' }),
-          ...Array(units).fill({ type: 'square' }),
-        ];
-        shuffleArray(elements);
+['highTens',    v => { HIGH_TENS_PROB = parseFloat(v);
+                     $('highTensVal').textContent = Math.round(v*100) + ' %'; }],
+  ];
 
-        for (const el of elements) {
-          let placed = false;
-          let attempts = 0;
-          while (!placed && attempts < 1000) {
-            attempts++;
-            const cx = random(x + BORDER_MARGIN, x + w - BORDER_MARGIN);
-            const cy = random(y + BORDER_MARGIN, y + h - BORDER_MARGIN);
+  sliders.forEach(([id,update]) => {
+    const el = $(id);
+    requestAnimationFrame(() => update(el.value));                   // maj badge au chargement
+    el.addEventListener('input', e => {    // maj temps‑réel
+      update(e.target.value);
+      if (autoRefresh) newCard();
+    });
+  });
 
-            if (el.type === 'bar') {
-              const vertical = random() < 0.5;
-              const ang = vertical
-                ? random(-PI / 12, PI / 12)
-                : random(HALF_PI - PI / 12, HALF_PI + PI / 12);
-              const bbox = rotatedBBox(cx, cy, barW, barH, ang);
-              if (insideCell(bbox, x, y, w, h) && !boxesOverlapAny(bbox, boxes)) {
-                drawBar(cx, cy, barW, barH, ang);
-                boxes.push(inflateBox(bbox, SPACING));
-                placed = true;
-              }
-            } else {
-              const bbox = { x: cx - square / 2, y: cy - square / 2, w: square, h: square };
-              if (insideCell(bbox, x, y, w, h) && !boxesOverlapAny(bbox, boxes)) {
-                drawSquare(bbox.x, bbox.y, square);
-                boxes.push(inflateBox(bbox, SPACING));
-                placed = true;
-              }
-            }
-          }
-        }
-      }
+  // couleurs -------------------
+  [['squareColor', v => SQUARE_COLOR = v],
+   ['barColor',    v => BAR_COLOR    = v]
+  ].forEach(([id,fn]) =>
+      $(id).addEventListener('input', e => { fn(e.target.value); if (autoRefresh) newCard(); })
+  );
 
-      /* --------------------------- BARRE ----------------------------- */
-      function drawBar(cx, cy, bw, bh, ang) {
-        push();
-        translate(cx, cy);
-        rotate(ang);
-        rectMode(CENTER);
-        fill(34, 176, 76);
-        stroke(21, 125, 54);
-        rect(0, 0, bw, bh, 2);
-        stroke(21, 125, 54, 150);
-        const step = bh / 10;
-        for (let i = -bh / 2 + step; i < bh / 2; i += step) line(-bw / 2, i, bw / 2, i);
-        pop();
-      }
+  // boutons --------------------
+  $('refreshBtn').addEventListener('click', () => { autoRefresh = false; refreshHeaderColors(); newCard(); });
+  $('saveBtn').addEventListener('click',    () => { autoRefresh = false; saveCanvas('bingo-'+Date.now(),'png'); });
 
-      function drawSquare(x, y, s) {
-        fill(79, 38, 238);
-        stroke(46, 25, 135);
-        rect(x, y, s, s, 2);
-      }
+  canvasDiv.addEventListener('click', () => { if (autoRefresh) newCard(); });
+}
 
-      /* ------------------------ OUTILS ------------------------------- */
-      function rotatedBBox(cx, cy, w, h, ang) {
-        const c = cos(ang), s = sin(ang);
-        const hw = w / 2, hh = h / 2;
-        const pts = [
-          { x: -hw, y: -hh }, { x: hw, y: -hh }, { x: hw, y: hh }, { x: -hw, y: hh }
-        ].map(p => ({ x: cx + p.x * c - p.y * s, y: cy + p.x * s + p.y * c }));
-        const xs = pts.map(p => p.x);
-        const ys = pts.map(p => p.y);
-        return { x: min(xs), y: min(ys), w: max(xs) - min(xs), h: max(ys) - min(ys) };
-      }
+    /* ----- COULEURS DU TITRE ----- */
+    function refreshHeaderColors(){
+      HEADER_BG=color(random(200,255),random(150,200),random(150,200));
+      HEADER_TEXT=color(random(150,255),random(50,150),random(100,150));
+      const wrap=document.getElementById('topBarWrapper');
+      if(wrap){wrap.style.backgroundColor=HEADER_BG.toString();}
+      document.getElementById('topBar').style.color=HEADER_TEXT.toString();
+    }
 
-      function insideCell(box, x, y, w, h) {
-        return box.x >= x + BORDER_MARGIN && box.y >= y + BORDER_MARGIN &&
-               box.x + box.w <= x + w - BORDER_MARGIN && box.y + box.h <= y + h - BORDER_MARGIN;
-      }
-      function boxesOverlap(a, b) {
-        return !(a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y);
-      }
-      function boxesOverlapAny(box, list) {
-        return list.some(other => boxesOverlap(box, other));
-      }
-      function inflateBox(box, pad) {
-        return { x: box.x - pad, y: box.y - pad, w: box.w + 2 * pad, h: box.h + 2 * pad };
-      }
-      function shuffleArray(arr) {
-        for (let i = arr.length - 1; i > 0; i--) {
-          const j = floor(random(i + 1));
-          [arr[i], arr[j]] = [arr[j], arr[i]];
-        }
-      }
+    /* --------------- DRAW -------------- */
+    function draw(){
+      background(255);
+      drawHeader();
+      drawGridLines();
+      for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)drawNumber(numbers[r][c],c*CELL_W,r*CELL_H+100,CELL_W,CELL_H);
+    }
 
-      /* --------------------- GRILLE DE FOND -------------------------- */
-      function drawGrid() {
-        stroke(250);
-        for (let i = 0; i <= COLS; i++) {
-          line(i * CELL_W, 0, i * CELL_W, CANVAS_H);
-        }
-        for (let j = 0; j <= ROWS; j++) {
-          line(0, j * CELL_H, CANVAS_W, j * CELL_H);
-        }
-      }
-    </script>
-  </body>
+    function drawHeader(){
+      fill(HEADER_BG);noStroke();rect(0,0,width,100);
+      fill(HEADER_TEXT);textAlign(CENTER,CENTER);textSize(48);text('BINGO DINGO',width/2,50);
+    }
+    function drawGridLines(){
+      stroke(180);strokeWeight(2);
+      for(let i=1;i<COLS;i++)line(i*CELL_W,100,i*CELL_W,height);
+      for(let j=1;j<ROWS;j++)line(0,j*CELL_H+100,width,j*CELL_H+100);
+    }
+
+    /* ----------- LOGIQUE ----------- */
+    function newCard(){generateCard();redraw();}
+    function generateCard(){
+  // si le tirage aléatoire est < probabilité, on force une plage élevée (≥ 50)
+  const useHigh = random() < HIGH_TENS_PROB;
+  const minVal  = useHigh ? 50 : 20;          // 50‑MAX  ou  20‑MAX
+  numbers = Array.from({length:ROWS}, () =>
+    Array.from({length:COLS}, () => int(random(minVal, MAX_VALUE)))
+  );
+}
+
+    /* --------- DESSIN NUMÉRO -------- */
+    function drawNumber(n,x,y,w,h){
+      const tens=floor(n/10);let units=n%10;if(random()<TRAP_UNITS)units=int(random(10,TRAP_MAX_UNITS));
+      const barW=w*0.05,barH=h*0.55,square=w*0.04;
+      const boxes=[],elements=[...Array(tens).fill({type:'bar'}),...Array(units).fill({type:'square'})];shuffle(elements);
+      for(const el of elements){let placed=false,tries=0;while(!placed&&tries<600){tries++;const cx=random(x+12,x+w-12),cy=random(y+12,y+h-12);if(el.type==='bar'){const ang=random()<.5?random(-PI/12,PI/12):random(HALF_PI-PI/12,HALF_PI+PI/12);const bb=rotBBox(cx,cy,barW,barH,ang);if(inCell(bb,x,y,w,h)&&!overlapsAny(bb,boxes)){drawBar(cx,cy,barW,barH,ang);boxes.push(inflate(bb,4));placed=true;}}else{const bb={x:cx-square/2,y:cy-square/2,w:square,h:square};if(inCell(bb,x,y,w,h)&&!overlapsAny(bb,boxes)){drawSq(bb.x,bb.y,square);boxes.push(inflate(bb,4));placed=true;}}}}
+    }
+    const drawBar=(cx,cy,bw,bh,a)=>{push();translate(cx,cy);rotate(a);rectMode(CENTER);fill(BAR_COLOR);stroke(21,125,54);rect(0,0,bw,bh,2);stroke(21,125,54,150);for(let i=-bh/2+bh/10;i<bh/2;i+=bh/10)line(-bw/2,i,bw/2,i);pop();};
+    const drawSq=(x,y,s)=>{fill(SQUARE_COLOR);stroke(46,25,135);rect(x,y,s,s,2);};
+
+    /* ---------- OUTILS GÉOMÉTRIE ---------- */
+    const rotBBox=(cx,cy,w,h,a)=>{const c=cos(a),s=sin(a),hw=w/2,hh=h/2;const pts=[{x:-hw,y:-hh},{x:hw,y:-hh},{x:hw,y:hh},{x:-hw,y:hh}].map(p=>({x:cx+p.x*c-p.y*s,y:cy+p.x*s+p.y*c}));const xs=pts.map(p=>p.x),ys=pts.map(p=>p.y);return{x:min(xs),y:min(ys),w:max(xs)-min(xs),h:max(ys)-min(ys)};};
+    const inCell=(b,x,y,w,h)=>b.x>=x+12&&b.y>=y+12&&b.x+b.w<=x+w-12&&b.y+b.h<=y+h-12;
+    const overlaps=(a,b)=>!(a.x+a.w<=b.x||b.x+b.w<=a.x||a.y+a.h<=b.y||b.y+b.h<=a.y);
+    const overlapsAny=(b,list)=>list.some(o=>overlaps(b,o));
+    const inflate=(b,p)=>({x:b.x-p,y:b.y-p,w:b.w+2*p,h:b.h+2*p});
+    const shuffle=arr=>{for(let i=arr.length-1;i>0;i--){const j=floor(random(i+1));[arr[i],arr[j]]=[arr[j],arr[i]];}};
+  </script>
+</body>
 </html>
