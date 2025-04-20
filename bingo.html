@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <title>Bingo base‑10 en p5.js</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+    <style>
+      body {
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        background: #fafafa;
+        font-family: sans-serif;
+        user-select: none;
+      }
+      h1 {
+        margin: 16px 0 8px;
+        font-size: 2.8rem;
+        color: #ff8d8d;
+      }
+      #saveBtn {
+        margin-top: 12px;
+        padding: 8px 20px;
+        font-size: 1rem;
+        background: #4c8bff;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      #saveBtn:hover { background: #3573e6; }
+    </style>
+  </head>
+  <body>
+    <h1>BINGO DINGO</h1>
+    <button id="saveBtn">Télécharger l’image</button>
+
+    <script>
+      /* -----------------------------------------------------------------
+         Bingo « base‑10 » :
+         – Génération alternée :
+             • tirage n°1  → valeurs 50‑99 (inclus)
+             • tirage n°2  → valeurs  0‑99 (inclus)
+             • tirage n°3  → valeurs 50‑99 … etc.
+         – Barres verticales ou horizontales, jamais superposées.
+         – Pièges possibles : plus de 9 carrés (~25 %).
+         – Clic dans le canevas → nouvelle feuille.
+         – Clic sur « Télécharger l’image » → enregistre le PNG, sans régénération.
+       ----------------------------------------------------------------- */
+
+      /* ----------------------- PARAMÈTRES GÉNÉRAUX -------------------- */
+      const COLS = 3;
+      const ROWS = 3;
+      const CELL_W = 280;
+      const CELL_H = 180;
+      const CANVAS_W = COLS * CELL_W;
+      const CANVAS_H = ROWS * CELL_H;
+
+      const BORDER_MARGIN = 12;
+      const SPACING = 4;
+      const TRAP_CHANCE = 0.25;
+
+      /* ---------------------------- p5.js ----------------------------- */
+      let numbers = [];
+      let pg;
+      let toggleRange = false; // false → 50‑99, true → 0‑99
+
+      function setup() {
+        pg = createCanvas(CANVAS_W, CANVAS_H).parent(document.body);
+        noLoop();
+
+        newCard();
+        pg.mousePressed(newCard);
+
+        document.getElementById('saveBtn').addEventListener('click', (e) => {
+          e.stopPropagation();
+          const ts = new Date().toISOString().replace(/[:.]/g, '-');
+          saveCanvas('bingo-' + ts, 'png');
+        });
+      }
+
+      function draw() {
+        background(255);
+        drawGrid();
+        for (let r = 0; r < ROWS; r++) {
+          for (let c = 0; c < COLS; c++) {
+            drawNumber(numbers[r][c], c * CELL_W, r * CELL_H, CELL_W, CELL_H);
+          }
+        }
+      }
+
+      /* -------------------------- LOGIQUE ---------------------------- */
+      function newCard() {
+        generateCard();
+        redraw();
+      }
+
+      function generateCard() {
+        const minVal = toggleRange ? 20 : 40;
+        // random(min, 100) retourne [min, 100) donc 0‑99 ou 50‑99 inclus
+        numbers = Array.from({ length: ROWS }, () =>
+          Array.from({ length: COLS }, () => int(random(minVal, 100)))
+        );
+        toggleRange = !toggleRange; // alterner au prochain tirage
+      }
+
+      /* --------------------- DESSIN D’UN NOMBRE ---------------------- */
+      function drawNumber(n, x, y, w, h) {
+        const tens = floor(n / 10);
+        let units = n % 10;
+        if (random() < TRAP_CHANCE) units = int(random(10, 16));
+
+        const barW = w * 0.05;
+        const barH = h * 0.55;
+        const square = w * 0.04;
+
+        const boxes = [];
+        const elements = [
+          ...Array(tens).fill({ type: 'bar' }),
+          ...Array(units).fill({ type: 'square' }),
+        ];
+        shuffleArray(elements);
+
+        for (const el of elements) {
+          let placed = false;
+          let attempts = 0;
+          while (!placed && attempts < 1000) {
+            attempts++;
+            const cx = random(x + BORDER_MARGIN, x + w - BORDER_MARGIN);
+            const cy = random(y + BORDER_MARGIN, y + h - BORDER_MARGIN);
+
+            if (el.type === 'bar') {
+              const vertical = random() < 0.5;
+              const ang = vertical
+                ? random(-PI / 12, PI / 12)
+                : random(HALF_PI - PI / 12, HALF_PI + PI / 12);
+              const bbox = rotatedBBox(cx, cy, barW, barH, ang);
+              if (insideCell(bbox, x, y, w, h) && !boxesOverlapAny(bbox, boxes)) {
+                drawBar(cx, cy, barW, barH, ang);
+                boxes.push(inflateBox(bbox, SPACING));
+                placed = true;
+              }
+            } else {
+              const bbox = { x: cx - square / 2, y: cy - square / 2, w: square, h: square };
+              if (insideCell(bbox, x, y, w, h) && !boxesOverlapAny(bbox, boxes)) {
+                drawSquare(bbox.x, bbox.y, square);
+                boxes.push(inflateBox(bbox, SPACING));
+                placed = true;
+              }
+            }
+          }
+        }
+      }
+
+      /* --------------------------- BARRE ----------------------------- */
+      function drawBar(cx, cy, bw, bh, ang) {
+        push();
+        translate(cx, cy);
+        rotate(ang);
+        rectMode(CENTER);
+        fill(34, 176, 76);
+        stroke(21, 125, 54);
+        rect(0, 0, bw, bh, 2);
+        stroke(21, 125, 54, 150);
+        const step = bh / 10;
+        for (let i = -bh / 2 + step; i < bh / 2; i += step) line(-bw / 2, i, bw / 2, i);
+        pop();
+      }
+
+      function drawSquare(x, y, s) {
+        fill(79, 38, 238);
+        stroke(46, 25, 135);
+        rect(x, y, s, s, 2);
+      }
+
+      /* ------------------------ OUTILS ------------------------------- */
+      function rotatedBBox(cx, cy, w, h, ang) {
+        const c = cos(ang), s = sin(ang);
+        const hw = w / 2, hh = h / 2;
+        const pts = [
+          { x: -hw, y: -hh }, { x: hw, y: -hh }, { x: hw, y: hh }, { x: -hw, y: hh }
+        ].map(p => ({ x: cx + p.x * c - p.y * s, y: cy + p.x * s + p.y * c }));
+        const xs = pts.map(p => p.x);
+        const ys = pts.map(p => p.y);
+        return { x: min(xs), y: min(ys), w: max(xs) - min(xs), h: max(ys) - min(ys) };
+      }
+
+      function insideCell(box, x, y, w, h) {
+        return box.x >= x + BORDER_MARGIN && box.y >= y + BORDER_MARGIN &&
+               box.x + box.w <= x + w - BORDER_MARGIN && box.y + box.h <= y + h - BORDER_MARGIN;
+      }
+      function boxesOverlap(a, b) {
+        return !(a.x + a.w <= b.x || b.x + b.w <= a.x || a.y + a.h <= b.y || b.y + b.h <= a.y);
+      }
+      function boxesOverlapAny(box, list) {
+        return list.some(other => boxesOverlap(box, other));
+      }
+      function inflateBox(box, pad) {
+        return { x: box.x - pad, y: box.y - pad, w: box.w + 2 * pad, h: box.h + 2 * pad };
+      }
+      function shuffleArray(arr) {
+        for (let i = arr.length - 1; i > 0; i--) {
+          const j = floor(random(i + 1));
+          [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+      }
+
+      /* --------------------- GRILLE DE FOND -------------------------- */
+      function drawGrid() {
+        stroke(250);
+        for (let i = 0; i <= COLS; i++) {
+          line(i * CELL_W, 0, i * CELL_W, CANVAS_H);
+        }
+        for (let j = 0; j <= ROWS; j++) {
+          line(0, j * CELL_H, CANVAS_W, j * CELL_H);
+        }
+      }
+    </script>
+  </body>
+</html>

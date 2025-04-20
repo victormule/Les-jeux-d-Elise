@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Les jeux d'Élise</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+  <style>
+    @font-face {
+      font-family: 'Borel';
+      src: url('font/Borel-Regular.otf') format('opentype');
+    }
+
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #fff0f5;
+      margin: 0;
+      padding: 0;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      padding: 20px;
+      text-align: left;
+      max-width: 1000px;
+      margin: auto;
+    }
+
+    .logo {
+      max-width: 200px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 2.5em;
+      color: #d65a8c;
+      font-family: 'Comic Sans MS', cursive, sans-serif;
+    }
+
+    p {
+      font-family: 'Borel', cursive;
+      color: #333;
+      font-size: 1.2em;
+      margin: 10px 0 0 0;
+      max-width: 700px;
+    }
+
+    .header-text {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .games {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 20px;
+      padding: 20px;
+      max-width: 1000px;
+      margin: auto;
+    }
+
+    .game {
+      position: relative;
+      background-color: white;
+      border-radius: 12px;
+      padding: 10px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      transition: transform 0.2s;
+    }
+
+    .game:hover {
+      transform: scale(1.05);
+    }
+
+    .game img {
+      width: 100%;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+
+    .tooltip {
+      display: none;
+      position: absolute;
+      bottom: 110%;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: #fff;
+      color: #333;
+      font-size: 0.9em;
+      border: 1px solid #ccc;
+      padding: 10px;
+      border-radius: 8px;
+      width: 220px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+      z-index: 10;
+    }
+
+    .game:hover .tooltip {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <img src="logo.png" alt="Logo Elise" class="logo">
+    <div class="header-text">
+      <h1>Les jeux d'Élise</h1>
+      <p>Bienvenue dans l'univers coloré et rigolo des jeux d'Élise ! Ici, les enfants s'amusent tout en apprenant à compter, à reconnaître les chiffres, et à résoudre de petits défis ludiques. Chaque jeu est conçu pour stimuler la curiosité, encourager la réflexion et rendre les maths drôlement plus sympas !</p>
+    </div>
+  </header>
+
+  <div class="games">
+    <div class="game">
+      <div class="tooltip">Jeux de Bingo pour travailler la numération de 1 à 100, avec des petits pièges pour que ce soit plus palpitant !</div>
+      <a href="bingo.html">
+        <img src="bingo.png" alt="Bingo Dingo">
+      </a>
+    </div>
+    <!-- Prévoir les autres jeux ici -->
+    <div class="game"></div>
+    <div class="game"></div>
+  </div>
+</body>
+</html>
