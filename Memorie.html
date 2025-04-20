@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Memory Nombres & Graphique</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+  <style>
+    body { margin:0; display:flex; justify-content:center; align-items:flex-start; height:100vh; background:#faf0e6; font-family:sans-serif; }
+    #controls { position:absolute; top:20px; right:20px; background:#fff; padding:10px; border:1px solid #ccc; border-radius:8px; }
+    canvas{border:2px solid #ccc;}
+    input, span { font-size:1rem; }
+  </style>
+</head>
+<body>
+  <div id="controls">
+    <div>Score : <span id="scoreVal">0</span></div>
+    <label>Max valeur: <input type="range" id="maxValueRange" min="16" max="99" value="20"><span id="maxValueLabel">20</span></label>
+    <button id="resetBtn">Réinitialiser</button>
+  </div>
+<script>
+// Memory : nombre vs représentation graphique statique
+const COLS=4, ROWS=4;
+const CARD_W=160, CARD_H=160;
+const MARGIN=10;
+let MAX_VALUE = 20;
+let cards = [], first=null, second=null, lock=false, score=0;
+
+function setup(){
+  createCanvas(COLS*CARD_W, ROWS*CARD_H).parent(document.body);
+  setupControls();
+  initCards();
+}
+
+function draw(){ background(250); drawCards(); }
+
+function setupControls(){
+  const r = select('#maxValueRange');
+  const label = select('#maxValueLabel');
+  r.input(() => { MAX_VALUE = int(r.value()); label.html(r.value()); });
+  select('#resetBtn').mousePressed(() => initCards());
+}
+
+function initCards(){
+  // reset score
+  score = 0;
+  select('#scoreVal').html('0');
+  // tire valeurs uniques…(){
+  // tire valeurs uniques 1..MAX_VALUE
+  let vals = [];
+  while(vals.length < (COLS*ROWS)/2){
+    let v = floor(random(1, MAX_VALUE+1));
+    if(!vals.includes(v)) vals.push(v);
+  }
+  cards = [];
+  vals.forEach(v => {
+    cards.push({value:v, type:'number', flipped:false, matched:false});
+    let g = {value:v, type:'graph', flipped:false, matched:false, shapes:[]};
+    generateShapes(g, 0, 0, CARD_W, CARD_H);
+    cards.push(g);
+  });
+  shuffle(cards, true);
+  first = second = null; lock = false;
+}
+
+function drawCards(){
+  cards.forEach((c,i)=>{
+    let x = (i%COLS)*CARD_W;
+    let y = floor(i/COLS)*CARD_H;
+    stroke(150); fill(c.flipped||c.matched?255:200);
+    rect(x,y,CARD_W,CARD_H,8);
+    if(c.flipped||c.matched){
+      if(c.type==='number'){
+        fill(50); textAlign(CENTER, CENTER); textSize(32);
+        text(c.value, x+CARD_W/2, y+CARD_H/2);
+      } else {
+        drawShapes(c.shapes, x, y);
+      }
+    }
+  });
+}
+
+function mousePressed(){
+  if(lock) return;
+  let idx = floor(mouseX/CARD_W) + floor(mouseY/CARD_H)*COLS;
+  if(idx<0||idx>=cards.length) return;
+  let c = cards[idx]; if(c.flipped||c.matched) return;
+  c.flipped=true;
+  if(!first) first={c,idx}; else if(!second){ second={c,idx}; checkMatch(); }
+}
+
+function checkMatch(){ lock=true;
+  setTimeout(()=>{
+    if(first.c.value===second.c.value && first.c.type!==second.c.type){
+      first.c.matched = second.c.matched = true;
+      // increment score
+      score++;
+      select('#scoreVal').html(score);
+    } else {
+      first.c.flipped = second.c.flipped = false;
+    }
+    first=second=null; lock=false;
+    if(cards.every(c=>c.matched)) initCards();
+  }, 4000);
+}
+
+// génère shapes statiques pour un graph card
+function generateShapes(g, x, y, w, h){
+  let pad=4, boxes=[];
+  let tens = floor(g.value/10), units = g.value%10;
+  // barres
+  let barW = w*0.1, barH = h*0.6;
+  for(let t=0; t<tens; t++){
+    placeShape(boxes, pad, () => {
+      let bx = random(x+MARGIN, x+w-MARGIN-barW);
+      let by = random(y+MARGIN, y+h-MARGIN-barH);
+      let box = {x:bx,y:by,w:barW,h:barH};
+      return box;
+    }, box => {
+      g.shapes.push({type:'bar',box}); boxes.push(inflate(box,pad));
+    });
+  }
+  // carrés ≤9
+  let sq = w*0.08;
+  for(let u=0; u<units; u++){
+    placeShape(boxes, pad, () => {
+      let sx = random(x+MARGIN, x+w-MARGIN-sq);
+      let sy = random(y+MARGIN, y+h-MARGIN-sq);
+      let box = {x:sx,y:sy,w:sq,h:sq};
+      return box;
+    }, box => {
+      g.shapes.push({type:'square',box}); boxes.push(inflate(box,pad));
+    });
+  }
+}
+
+function placeShape(existing, pad, genBox, commit){
+  let attempts=0;
+  while(attempts<500){
+    attempts++;
+    let box = genBox();
+    if(!overlapAny(inflate(box,pad), existing)){
+      commit(box);
+      return;
+    }
+  }
+}
+
+function drawShapes(shapes, x, y){
+  shapes.forEach(s=>{
+    let b = s.box;
+    if(s.type==='bar'){
+      fill(34,176,76); stroke(21,125,54);
+      rect(x + b.x, y + b.y, b.w, b.h,3);
+      stroke(21,125,54,150);
+      let seg=8, step=b.h/(seg+1);
+      for(let i=1;i<=seg;i++) line(x + b.x, y + b.y + i*step, x + b.x + b.w, y + b.y + i*step);
+    } else {
+      fill(79,38,238); stroke(46,25,135);
+      rect(x + b.x, y + b.y, b.w, b.h,3);
+    }
+  });
+}
+
+// AABB utilitaires
+function boxesOverlap(a,b){ return !(a.x+a.w<=b.x||b.x+b.w<=a.x||a.y+a.h<=b.y||b.y+b.h<=a.y); }
+function overlapAny(b,list){ return list.some(o=>boxesOverlap(b,o)); }
+function inflate(box,p){ return {x:box.x-p,y:box.y-p,w:box.w+2*p,h:box.h+2*p}; }
+</script>
+</body>
+</html>
+
