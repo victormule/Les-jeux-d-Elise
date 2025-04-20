@@ -6,55 +6,58 @@
   <title>Les jeux d'Élise</title>
   <link rel="icon" type="image/png" href="favicon.png">
   <style>
-    /* ---------------------- POLICES ---------------------- */
-    @font-face {
-      font-family: 'Borel';
-      src: url('font/Borel-Regular.otf') format('opentype');
+    @font-face{font-family:'Borel';src:url('font/Borel-Regular.otf') format('opentype');}
+    body{font-family:Arial,sans-serif;background:#fff0f5;margin:0;padding:0;}
+
+    header{display:flex;align-items:center;gap:20px;padding:20px;max-width:1000px;margin:auto;text-align:left;}
+    /* Logo animé de façon rigolote */
+    .logo{
+      max-width:250px;
+      flex-shrink:0;
+      /* animations de base : flottement + wobble */
+      animation:logoFloat 3s ease-in-out infinite,
+                 logoWobble 6s ease-in-out infinite;
+      transform-origin:center bottom;
+      cursor:pointer;
+    }
+    /* survol : petit saut vers le haut et rotation rapide */
+    .logo:hover {
+      animation:logoHover 0.4s ease-in-out forwards;
+    }
+    @keyframes logoHover {
+      0% { transform: translateY(0) rotate(0deg) scale(1); }
+      30% { transform: translateY(-5px) rotate(5deg) scale(1.1); }
+      60% { transform: translateY(-8px) rotate(-3deg) scale(1.05); }
+      100% { transform: translateY(0) rotate(0deg) scale(1); }
+    }
+    @keyframes logoFloat {
+      0%,100% { transform: translateY(0) rotate(0deg); }
+      25%      { transform: translateY(-6px) rotate(2deg); }
+      50%      { transform: translateY(0) rotate(0deg); }
+      75%      { transform: translateY(4px) rotate(-2deg); }
+    }
+    @keyframes logoWobble {
+      0%,20%,100%  { transform: translateY(0) rotate(0deg); }
+      10%,30%      { transform: translateY(-2px) rotate(3deg); }
+      40%          { transform: translateY(2px) rotate(-3deg); }
+      60%,80%      { transform: translateY(1px) rotate(1deg); }
     }
 
-    /* ---------------------- GÉNÉRAL ---------------------- */
-    body {
-      font-family: Arial, sans-serif;
-      background-color: #fff0f5;
-      margin: 0;
-      padding: 0;
+    /* titre sautillant */
+    h1{
+      margin:0;
+      font-size:2.6em;
+      color:#d65a8c;
+      font-family:'Comic Sans MS',cursive,sans-serif;
+      white-space:pre;
     }
+    h1 span{display:inline-block;animation:jump 2s ease-in-out infinite;}
+    @keyframes jump{0%,100%{transform:translateY(0);}30%{transform:translateY(-8px);}60%{transform:translateY(4px);}}
 
-    /* ---------------------- EN‑TÊTE ---------------------- */
-    header {
-      display: flex;
-      align-items: center;
-      gap: 20px;
-      padding: 20px;
-      max-width: 1000px;
-      margin: auto;
-      text-align: left;
-    }
-    .logo {
-      max-width: 250px;
-      flex-shrink: 0;
-    }
-    .header-text {
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-    }
-    h1 {
-      margin: 0;
-      font-size: 2.5em;
-      color: #d65a8c;
-      font-family: 'Comic Sans MS', cursive, sans-serif;
-    }
-    p {
-      font-family: 'Borel', cursive;
-      color: #333;
-      font-size: 1.2em;
-      margin: 10px 0 0 0;
-      max-width: 700px;
-    }
+    p{font-family:'Borel',cursive;color:#333;font-size:1.2em;margin:10px 0 0 0;max-width:700px;}
 
-    /* ------------- RESPONSIVE : < 780 px --------------- */
-    @media (max-width: 780px) {
+        /* ------------- RESPONSIVE : < 780 px --------------- */
+        @media (max-width: 780px) {
       header {
         flex-direction: column;   /* logo au‑dessus */
         align-items: center;
@@ -72,69 +75,33 @@
       }
     }
 
-    /* ---------------------- GRILLE DES JEUX ---------------------- */
-    .games {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-      gap: 20px;
-      padding: 20px;
-      max-width: 1000px;
-      margin: auto;
-    }
-    .game {
-      position: relative;
-      background-color: white;
-      border-radius: 12px;
-      padding: 10px;
-      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-      transition: transform 0.2s;
-    }
-    .game:hover { transform: scale(1.05); }
-    .game img {
-      width: 100%;
-      border-radius: 10px;
-      cursor: pointer;
-    }
-
-    /* info‑bulle */
-    .tooltip {
-      display: none;
-      position: absolute;
-      bottom: 110%;
-      left: 50%;
-      transform: translateX(-50%);
-      background-color: #fff;
-      color: #333;
-      font-size: 0.9em;
-      border: 1px solid #ccc;
-      padding: 10px;
-      border-radius: 8px;
-      width: 220px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-      z-index: 10;
-    }
-    .game:hover .tooltip { display: block; }
+    .games{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px;padding:20px;max-width:1000px;margin:auto;}
+    .game{position:relative;background:#fff;border-radius:12px;padding:10px;box-shadow:0 4px 8px rgba(0,0,0,.1);transition:transform .2s;}
+    .game:hover{transform:scale(1.05);} .game img{width:100%;border-radius:10px;cursor:pointer;}
+    .tooltip{display:none;position:absolute;bottom:110%;left:50%;transform:translateX(-50%);background:#fff;color:#333;font-size:.9em;border:1px solid #ccc;padding:10px;border-radius:8px;width:220px;box-shadow:0 2px 6px rgba(0,0,0,.2);z-index:10;}
+    .game:hover .tooltip{display:block;}
   </style>
 </head>
 <body>
   <header>
-    <img src="logo.png" alt="Logo Elise" class="logo">
+    <img src="logo.png" alt="Logo Élise" class="logo">
     <div class="header-text">
-      <h1>Les jeux d'Élise</h1>
+      <h1 id="title">Les jeux d'Élise</h1>
       <p>Bienvenue dans l'univers coloré et rigolo des jeux d'Élise ! Ici, les enfants s'amusent tout en apprenant à compter, à reconnaître les chiffres, et à résoudre de petits défis ludiques. Chaque jeu est conçu pour stimuler la curiosité, encourager la réflexion et rendre les maths drôlement plus sympas !</p>
     </div>
   </header>
 
   <main class="games">
-    <div class="game">
-      <div class="tooltip">Jeu de Bingo pour travailler la numération de 1 à 100, avec des petits pièges pour que ce soit plus palpitant !</div>
-      <a href="bingo.html">
-        <img src="bingo.png" alt="Bingo Dingo">
-      </a>
-    </div>
-    <!-- Autres jeux à venir -->
-    <div class="game"></div>
-    <div class="game"></div>
+    <div class="game"><div class="tooltip">Jeu de Bingo pour travailler la numération de 1 à 100, avec des petits pièges pour que ce soit plus palpitant !</div><a href="bingo.html"><img src="bingo.png" alt="Bingo Dingo"></a></div>
+    <div class="game"></div><div class="game"></div>
   </main>
+
+  <script>
+    const title = document.getElementById('title');
+    const chars = [...title.textContent];
+    title.innerHTML = chars.map((ch,i)=>
+      `<span style="animation-delay:${(i*0.12).toFixed(2)}s">${ch===' ' ? '&nbsp;' : ch}</span>`
+    ).join('');
+  </script>
 </body>
 </html>
