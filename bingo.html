@@ -5,7 +5,6 @@
   <title>Bingo base‑10 en p5.js</title>
   <link rel="icon" type="image/png" href="favicon.png">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
-  <!-- JSZip pour créer le fichier zip -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <style>
     @font-face{font-family:'Borel';src:url('font/Borel-Regular.otf') format('opentype');}
@@ -18,14 +17,14 @@
     .back-link{position:absolute;left:20px;top:50%;transform:translateY(-50%);font-size:1rem;white-space:nowrap;}
     #topBar{font-size:2.5rem;font-weight:bold;}
 
-    /* Layout */
+    /* Layout principal */
     .wrapper{display:flex;gap:40px;justify-content:center;align-items:flex-start;flex-wrap:wrap;padding:20px;max-width:1200px;margin:auto;}
     .sidebar{display:flex;flex-direction:column;gap:16px;max-width:260px;flex:0 0 260px;align-items:center;}
     .logoSidebar{width:200px;border-radius:12px;box-shadow:0 2px 4px rgba(0,0,0,0.15);}    
     .sidebar label{font-size:1rem;display:flex;flex-direction:column;gap:4px;width:100%;}
     .sidebar input[type="range"],.sidebar input[type="color"],.sidebar input[type="number"]{width:100%;}
     .value-badge{font-size:0.9rem;font-weight:bold;color:#333;margin-top:2px;align-self:flex-end;}
-    button{padding:10px;font-size:1rem;background:#4c8bff;color:#fff;border:none;border-radius:6px;cursor:pointer;transition:background .2s;width:100%;}
+    button{padding:10px;font-size:1rem;background:#576c94;color:#fff;border:none;border-radius:6px;cursor:pointer;transition:background .2s;width:100%;}
     button:hover{background:#3573e6;}
 
     .main{flex:1 1 840px;min-width:320px;display:flex;flex-direction:column;gap:20px;}
@@ -33,12 +32,51 @@
     #canvasContainer{width:100%;}
     canvas{max-width:100%;height:auto;}
 
+    /* ----------- Responsif < 1200px ----------- */
     @media (max-width:1200px){
       .wrapper{flex-direction:column;align-items:center;}
       .main{order:1;}
-      .logoSidebar{width:300px}
+      .logoSidebar{width:300px;}
       .sidebar{order:2;width:100%;max-width:840px;flex:1 1 auto;align-items:center;}
       .sidebar button,.sidebar input{width:100%;}
+    }
+
+    /* ----------- Touch friendly < 780px ----------- */
+    @media (max-width:780px){
+      /* Agrandir logo encore un peu */
+      .logoSidebar{width:320px;}
+
+      /* Plus gros libellés */
+      .sidebar label{font-size:1.2rem;}
+
+      /* Boutons généreux pour le tactile */
+      button{
+        font-size:1.35rem;
+        padding:16px 12px;
+        border-radius:8px;
+      }
+
+      /* Curseurs et champs numériques */
+      .sidebar input[type="range"],
+      .sidebar input[type="number"],
+      .sidebar input[type="color"]{
+        height:48px;
+        font-size:1.2rem;
+      }
+
+      /* Curseur : pouce plus grand */
+      .sidebar input[type="range"]::-webkit-slider-thumb{
+        width:32px; height:32px; border-radius:50%; background:#4c8bff; cursor:pointer;
+      }
+      .sidebar input[type="range"]::-moz-range-thumb{
+        width:32px; height:32px; border-radius:50%; background:#4c8bff; cursor:pointer;
+      }
+      .sidebar input[type="range"]::-ms-thumb{
+        width:32px; height:32px; border-radius:50%; background:#4c8bff; cursor:pointer;
+      }
+
+      /* Agrandir badge valeurs */
+      .value-badge{font-size:1.05rem;}
     }
   </style>
 </head>
