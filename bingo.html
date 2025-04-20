@@ -31,7 +31,32 @@
     #canvasContainer{width:100%;}
     canvas{max-width:100%;height:auto;}
 
-    @media(max-width:768px){.wrapper{flex-direction:column;}.sidebar{max-width:none;flex:1 1 auto;}.main{order:2;}}
+/* ↓ mobile / tablette : dès que l’espace est < 1200 px */
+@media (max-width:1200px){
+  /* empiler les deux colonnes */
+  .wrapper{
+    flex-direction:column;
+    align-items:center;        /* centre tout horizontalement */
+  }
+
+  /* ordre : grille (main) en 1er, puis logo+boutons */
+  .main   { order:1; }
+
+  .sidebar{
+    order:2;
+    width:100%;                /* prend toute la largeur dispo */
+    max-width:840px;           /* ≈ largeur du canvas           */
+    flex:1 1 auto;
+    align-items:center;        /* centre le logo                */
+  }
+
+  /* boutons & curseurs épousent la largeur de la sidebar */
+  .sidebar button,
+  .sidebar input[type="range"],
+  .sidebar input[type="color"]{
+    width:100%;
+  }
+}
   </style>
 </head>
 <body>
@@ -196,4 +221,5 @@
   </script>
 </body>
 </html>
+
 
