@@ -6,11 +6,13 @@
   <title>Les jeux d'Élise</title>
   <link rel="icon" type="image/png" href="favicon.png">
   <style>
+    /* ---------------------- POLICES ---------------------- */
     @font-face {
       font-family: 'Borel';
       src: url('font/Borel-Regular.otf') format('opentype');
     }
 
+    /* ---------------------- GÉNÉRAL ---------------------- */
     body {
       font-family: Arial, sans-serif;
       background-color: #fff0f5;
@@ -18,27 +20,31 @@
       padding: 0;
     }
 
+    /* ---------------------- EN‑TÊTE ---------------------- */
     header {
       display: flex;
       align-items: center;
       gap: 20px;
       padding: 20px;
-      text-align: left;
       max-width: 1000px;
       margin: auto;
+      text-align: left;
     }
-
     .logo {
       max-width: 200px;
+      flex-shrink: 0;
     }
-
+    .header-text {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
     h1 {
       margin: 0;
       font-size: 2.5em;
       color: #d65a8c;
       font-family: 'Comic Sans MS', cursive, sans-serif;
     }
-
     p {
       font-family: 'Borel', cursive;
       color: #333;
@@ -47,12 +53,26 @@
       max-width: 700px;
     }
 
-    .header-text {
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
+    /* ------------- RESPONSIVE : < 780 px --------------- */
+    @media (max-width: 780px) {
+      header {
+        flex-direction: column;   /* logo au‑dessus */
+        align-items: center;
+        text-align: center;
+        gap: 10px;
+      }
+      .logo {
+        max-width: 160px;        /* logo un peu plus petit */
+      }
+      .header-text {
+        align-items: center;     /* centre le titre + paragraphe */
+      }
+      p {
+        max-width: 90%;          /* paragraphe plus étroit */
+      }
     }
 
+    /* ---------------------- GRILLE DES JEUX ---------------------- */
     .games {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -61,7 +81,6 @@
       max-width: 1000px;
       margin: auto;
     }
-
     .game {
       position: relative;
       background-color: white;
@@ -70,17 +89,14 @@
       box-shadow: 0 4px 8px rgba(0,0,0,0.1);
       transition: transform 0.2s;
     }
-
-    .game:hover {
-      transform: scale(1.05);
-    }
-
+    .game:hover { transform: scale(1.05); }
     .game img {
       width: 100%;
       border-radius: 10px;
       cursor: pointer;
     }
 
+    /* info‑bulle */
     .tooltip {
       display: none;
       position: absolute;
@@ -97,10 +113,7 @@
       box-shadow: 0 2px 6px rgba(0,0,0,0.2);
       z-index: 10;
     }
-
-    .game:hover .tooltip {
-      display: block;
-    }
+    .game:hover .tooltip { display: block; }
   </style>
 </head>
 <body>
@@ -108,20 +121,20 @@
     <img src="logo.png" alt="Logo Elise" class="logo">
     <div class="header-text">
       <h1>Les jeux d'Élise</h1>
-      <p>Bienvenue dans l'univers coloré et rigolo des jeux d'Élise ! Ici, les enfants s'amusent tout en apprenant à compter, à reconnaître les chiffres, et à résoudre de petits défis ludiques. Chaque jeu est conçu pour stimuler la curiosité, encourager la réflexion et rendre les maths drôlement plus sympas !</p>
+      <p>Bienvenue dans l'univers coloré et rigolo des jeux d'Élise ! Ici, les enfants s'amusent tout en apprenant à compter, à reconnaître les chiffres, et à résoudre de petits défis ludiques. Chaque jeu est conçu pour stimuler la curiosité, encourager la réflexion et rendre les maths drôlement plus sympas !</p>
     </div>
   </header>
 
-  <div class="games">
+  <main class="games">
     <div class="game">
-      <div class="tooltip">Jeux de Bingo pour travailler la numération de 1 à 100, avec des petits pièges pour que ce soit plus palpitant !</div>
+      <div class="tooltip">Jeu de Bingo pour travailler la numération de 1 à 100, avec des petits pièges pour que ce soit plus palpitant !</div>
       <a href="bingo.html">
         <img src="bingo.png" alt="Bingo Dingo">
       </a>
     </div>
-    <!-- Prévoir les autres jeux ici -->
+    <!-- Autres jeux à venir -->
     <div class="game"></div>
     <div class="game"></div>
-  </div>
+  </main>
 </body>
 </html>
