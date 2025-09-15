@@ -27,7 +27,6 @@
 
   <script type="text/babel">
     const { useEffect, useMemo, useRef, useState } = React;
-    const MAX_FONT = 14; // police max, à ajuster
 
     // ------------------------------ Helpers ------------------------------
     const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
@@ -73,6 +72,7 @@
 
     // Générateur d'expressions selon la difficulté & le mode — jamais de résultat négatif, divisions exactes uniquement.
     function exprBankForResult(target, mode, rng, difficulty = 'facile') {
+      if (!mode) return []; // mode vide => pas de calculs
       const list = [];
       const pushUnique = (s) => { if (!list.includes(s)) list.push(s); };
 
@@ -129,7 +129,7 @@
             for (let a=1; a<=lim; a++) for (let b=1; b<=lim; b++) for (let c=0; c<=maxN; c++) {
               const prod = a*b;
               const dAdd = target - prod - c; if (dAdd>=0 && dAdd<=maxN) pushUnique(`${a} × ${b} + ${c} + ${dAdd}`);
-              const dSub = prod + c - target; if (dSub>=0 && dSub<=maxN) pushUnique(`${a} × ${b} + ${c} - ${dSub}`);
+              const dSub = prod + c - target; if (dSub>=0 && d<=maxN) pushUnique(`${a} × ${b} + ${c} - ${dSub}`);
               const dSub2 = prod - c - target; if (dSub2>=0 && dSub2<=maxN) pushUnique(`${a} × ${b} - ${c} - ${dSub2}`);
             }
             for (let a=1; a<=lim; a++) for (let b=1; b<=lim; b++) for (let c=1; c<=lim; c++) {
@@ -167,76 +167,74 @@
 
     const rgbToHex = ([r,g,b]) => `#${[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('')}`;
 
-    // Mise en page: horizontal si ça tient, sinon vertical empilé (avec padding)
-// Mise en page intelligente : horizontal si possible,
-// sinon wrap vertical avec opérateurs sur leur propre ligne.
-// Si la cellule est trop petite (ex. 1 px), on n’affiche rien (mode: 'none').
-function layoutExpression(expr, rw, rh) {
-  const pad = Math.floor(0.08 * Math.min(rw, rh));
-  const availW = Math.max(1, rw - 2 * pad);
-  const availH = Math.max(1, rh - 2 * pad);
+    // Mise en page : horizontal si possible, sinon wrap vertical avec opérateurs isolés ; sinon none
+    function layoutExpression(expr, rw, rh) {
+      const pad = Math.floor(0.08 * Math.min(rw, rh));
+      const availW = Math.max(1, rw - 2 * pad);
+      const availH = Math.max(1, rh - 2 * pad);
 
-  const estWidth = (text, fs) => Math.ceil((text.length || 1) * fs * 0.6);
-  const lineHeight = (fs) => Math.round(fs * 1.2);
+      const estWidth = (text, fs) => Math.ceil((text.length || 1) * fs * 0.6);
+      const lineHeight = (fs) => Math.round(fs * 1.2);
 
-  // 1) Tentative horizontale si ça tient
-  {
-const fs0 = Math.min(
-  MAX_FONT,
-  Math.max(6, Math.floor(Math.min(availH * 0.42, (availW / Math.max(1, expr.length)) / 0.6)))
-);
-    if (fs0 >= 10 && estWidth(expr, fs0) <= availW) {
-      return { mode: 'h', lines: [expr], font: fs0, pad };
-    }
-  }
-
-  // 2) Verticale avec wrap par tokens et opérateurs sur leur propre ligne
-  const tokens = expr.split(/\s+/).filter(Boolean);
-  const isOp = (t) => t === '+' || t === '-' || t === '×' || t === '÷';
-
-  for (
-    let fs = Math.min(MAX_FONT, Math.max(6, Math.floor(availH * 0.42)));
-    fs >= 6;
-    fs--
-  ) {
-    const lines = [];
-    let current = '';
-
-    for (let i = 0; i < tokens.length; i++) {
-      const t = tokens[i];
-      const candidate = current ? current + ' ' + t : t;
-
-      if (estWidth(candidate, fs) <= availW) {
-        current = candidate;
-      } else {
-        if (current) lines.push(current);
-        if (isOp(t)) {
-          // centre l’opérateur tout seul sur une ligne
-          lines.push(t);
-          current = '';
-        } else {
-          current = t;
-          // même seul ne rentre pas => police trop grande pour la largeur
-          if (estWidth(current, fs) > availW) {
-            current = '';
-            break; // on descend la taille de police (boucle fs)
-          }
+      // 1) Horizontale
+      {
+        const fs0 = Math.max(
+          6,
+          Math.floor(
+            Math.min(
+              availH * 0.42,
+              (availW / Math.max(1, expr.length)) / 0.6
+            )
+          )
+        );
+        if (fs0 >= 10 && estWidth(expr, fs0) <= availW) {
+          return { mode: 'h', lines: [expr], font: fs0, pad };
         }
       }
+
+      // 2) Verticale (wrap)
+      const tokens = expr.split(/\s+/).filter(Boolean);
+      const isOp = (t) => t === '+' || t === '-' || t === '×' || t === '÷';
+
+      for (
+        let fs = Math.min(128, Math.max(6, Math.floor(availH * 0.42)));
+        fs >= 6;
+        fs--
+      ) {
+        const lines = [];
+        let current = '';
+
+        for (let i = 0; i < tokens.length; i++) {
+          const t = tokens[i];
+          const candidate = current ? current + ' ' + t : t;
+
+          if (estWidth(candidate, fs) <= availW) {
+            current = candidate;
+          } else {
+            if (current) lines.push(current);
+            if (isOp(t)) {
+              lines.push(t); // opérateur seul
+              current = '';
+            } else {
+              current = t;
+              if (estWidth(current, fs) > availW) {
+                current = '';
+                break; // police trop grande, on descend
+              }
+            }
+          }
+        }
+        if (current) lines.push(current);
+        if (!lines.length) continue;
+
+        const totalH = lines.length * lineHeight(fs);
+        if (totalH <= availH) {
+          return { mode: 'v', lines, font: fs, pad };
+        }
+      }
+
+      return { mode: 'none', lines: [], font: 0, pad };
     }
-    if (current) lines.push(current);
-    if (!lines.length) continue;
-
-    const totalH = lines.length * lineHeight(fs);
-    if (totalH <= availH) {
-      return { mode: 'v', lines, font: fs, pad };
-    }
-  }
-
-  // 3) Cellule minuscule : pas de rendu texte
-  return { mode: 'none', lines: [], font: 0, pad };
-}
-
 
     // ------------------------------ App ------------------------------
     function App() {
@@ -251,6 +249,7 @@ const fs0 = Math.min(
       const [mergeSameColor, setMergeSameColor] = useState(true);
       const [contrast, setContrast] = useState(0);
       const [saturation, setSaturation] = useState(0);
+      const [showOps, setShowOps] = useState(true); // <— bascule simple : afficher/masquer les calculs
 
       const [processing, setProcessing] = useState(false);
       const [error, setError] = useState(null);
@@ -366,9 +365,11 @@ const fs0 = Math.min(
         const cellSize = clamp(cellPx, 16, 200);
         const Wpx = gridWidth * cellSize;
         const Hpx = gridHeight * cellSize;
-        const LEGEND_H = 120;
+        const LEGEND_H = showOps ? 120 : 0;
         const exprBank = {};
-        for (const e of numberColorMap) exprBank[e.value] = exprBankForResult(e.value, opsMode, rng, difficulty);
+        if (showOps) {
+          for (const e of numberColorMap) exprBank[e.value] = exprBankForResult(e.value, opsMode, rng, difficulty);
+        }
         const rects = mergeSameColor
           ? mergeRectangles(cellAssignments, gridWidth, gridHeight)
           : cellAssignments.map((k, i) => ({ x: i%gridWidth, y: Math.floor(i/gridWidth), w:1, h:1, k }));
@@ -377,37 +378,41 @@ const fs0 = Math.min(
         s += `<rect x='0' y='0' width='${Wpx}' height='${Hpx + LEGEND_H}' fill='white'/>`;
         for (const r of rects) {
           const cx=r.x*cellSize, cy=r.y*cellSize, rw=r.w*cellSize, rh=r.h*cellSize;
-          const resultVal = (numberColorMap[r.k]?.value ?? 0);
-          const exprs = exprBank[resultVal] || [String(resultVal)];
-          const expr = exprs[(r.x + r.y + r.k) % exprs.length];
-          const L = layoutExpression(expr, rw, rh);
           s += `<rect x='${cx}' y='${cy}' width='${rw}' height='${rh}' fill='none' stroke='black' stroke-width='1'/>`;
-          if (L.mode === 'h') {
-            s += `<text x='${cx + rw/2}' y='${cy + rh/2}' font-family='monospace' font-size='${L.font}' text-anchor='middle' dominant-baseline='middle'>${expr}</text>`;
-          } else {
-            const lh = Math.round(L.font * 1.2);
-            const totalH = lh * L.lines.length;
-            let y0 = cy + (rh - totalH) / 2 + L.font * 0.85;
-            for (let i=0; i<L.lines.length; i++) {
-              const ly = y0 + i*lh;
-              s += `<text x='${cx + rw/2}' y='${ly}' font-family='monospace' font-size='${L.font}' text-anchor='middle' dominant-baseline='middle'>${L.lines[i]}</text>`;
+          if (showOps) {
+            const resultVal = (numberColorMap[r.k]?.value ?? 0);
+            const exprs = exprBank[resultVal] || [String(resultVal)];
+            const expr = exprs[(r.x + r.y + r.k) % exprs.length];
+            const L = layoutExpression(expr, rw, rh);
+            if (L.mode === 'h') {
+              s += `<text x='${cx + rw/2}' y='${cy + rh/2}' font-family='monospace' font-size='${L.font}' text-anchor='middle' dominant-baseline='middle'>${expr}</text>`;
+            } else if (L.mode === 'v') {
+              const lh = Math.round(L.font * 1.2);
+              const totalH = lh * L.lines.length;
+              let y0 = cy + (rh - totalH) / 2 + L.font * 0.85;
+              for (let i=0; i<L.lines.length; i++) {
+                const ly = y0 + i*lh;
+                s += `<text x='${cx + rw/2}' y='${ly}' font-family='monospace' font-size='${L.font}' text-anchor='middle' dominant-baseline='middle'>${L.lines[i]}</text>`;
+              }
             }
           }
         }
-        const legendY = Hpx + 16;
-        s += `<g>`;
-        s += `<text x='8' y='${legendY}' font-family='sans-serif' font-size='14' font-weight='bold'>Légende: résultat → couleur</text>`;
-        let lx=8, ly=legendY+12;
-        for (let i=0; i<numberColorMap.length; i++) {
-          const { value, color } = numberColorMap[i];
-          s += `<rect x='${lx}' y='${ly}' width='18' height='18' fill='${rgbToHex(color)}' stroke='#333'/>`;
-          s += `<text x='${lx+26}' y='${ly+14}' font-family='sans-serif' font-size='12'>= ${value}</text>`;
-          lx += 120; if (lx > Wpx - 140) { lx = 8; ly += 28; }
+        if (showOps) {
+          const legendY = Hpx + 16;
+          s += `<g>`;
+          s += `<text x='8' y='${legendY}' font-family='sans-serif' font-size='14' font-weight='bold'>Légende: résultat → couleur</text>`;
+          let lx=8, ly=legendY+12;
+          for (let i=0; i<numberColorMap.length; i++) {
+            const { value, color } = numberColorMap[i];
+            s += `<rect x='${lx}' y='${ly}' width='18' height='18' fill='${rgbToHex(color)}' stroke='#333'/>`;
+            s += `<text x='${lx+26}' y='${ly+14}' font-family='sans-serif' font-size='12'>= ${value}</text>`;
+            lx += 120; if (lx > Wpx - 140) { lx = 8; ly += 28; }
+          }
+          s += `</g>`;
         }
-        s += `</g>`;
         s += `</svg>`;
         return s;
-      }, [gridWidth, gridHeight, cellAssignments, palette, opsMode, numberColorMap, seed, mergeSameColor, cellPx, difficulty]);
+      }, [gridWidth, gridHeight, cellAssignments, palette, opsMode, numberColorMap, seed, mergeSameColor, cellPx, difficulty, showOps]);
 
       // Aperçu coloré (canvas)
       useEffect(() => {
@@ -425,37 +430,41 @@ const fs0 = Math.min(
       function renderGridToCanvas(scale = 2) {
         if (!gridWidth || !gridHeight || !cellAssignments.length || !palette.length) return null;
         const cellSize = clamp(cellPx, 16, 200);
-        const W = gridWidth * cellSize; const H = gridHeight * cellSize; const LEGEND_H = 120;
+        const W = gridWidth * cellSize; const H = gridHeight * cellSize; const LEGEND_H = showOps ? 120 : 0;
         const rects = mergeSameColor ? mergeRectangles(cellAssignments, gridWidth, gridHeight)
           : cellAssignments.map((k,i)=>({x:i%gridWidth, y:Math.floor(i/gridWidth), w:1, h:1, k}));
         const results = numberColorMap.map(e=>e.value);
-        const rng = mulberry32(seed); const exprBank = {}; for (const r of results) exprBank[r] = exprBankForResult(r, opsMode, rng, difficulty);
+        const rng = mulberry32(seed); const exprBank = {}; if (showOps) { for (const r of results) exprBank[r] = exprBankForResult(r, opsMode, rng, difficulty); }
         const canvas = document.createElement('canvas'); canvas.width=Math.max(1,Math.floor(W*scale)); canvas.height=Math.max(1,Math.floor((H+LEGEND_H)*scale));
         const ctx = canvas.getContext('2d'); if (!ctx) return null;
         ctx.scale(scale, scale); ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H+LEGEND_H); ctx.strokeStyle='#000';
         for (const r of rects) {
           const cx=r.x*cellSize, cy=r.y*cellSize, rw=r.w*cellSize, rh=r.h*cellSize;
           ctx.lineWidth = 1; ctx.strokeRect(cx+0.5, cy+0.5, rw-1, rh-1);
-          const val = numberColorMap[r.k]?.value ?? 0; const exprs = exprBank[val] || [String(val)];
-          const expr = exprs[(r.x + r.y + r.k) % exprs.length];
-          const L = layoutExpression(expr, rw, rh);
-          ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle='#000';
-          if (L.mode === 'h') {
-            ctx.font = `${L.font}px monospace`;
-            ctx.fillText(expr, cx+rw/2, cy+rh/2);
-          } else {
-            const lh = Math.round(L.font * 1.2);
-            let y0 = cy + (rh - (lh * L.lines.length)) / 2 + L.font * 0.85;
-            ctx.font = `${L.font}px monospace`;
-            for (let i=0; i<L.lines.length; i++) {
-              ctx.fillText(L.lines[i], cx + rw/2, y0 + i*lh);
+          if (showOps) {
+            const val = numberColorMap[r.k]?.value ?? 0; const exprs = exprBank[val] || [String(val)];
+            const expr = exprs[(r.x + r.y + r.k) % exprs.length];
+            const L = layoutExpression(expr, rw, rh);
+            ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle='#000';
+            if (L.mode === 'h') {
+              ctx.font = `${L.font}px monospace`;
+              ctx.fillText(expr, cx+rw/2, cy+rh/2);
+            } else if (L.mode === 'v') {
+              const lh = Math.round(L.font * 1.2);
+              let y0 = cy + (rh - (lh * L.lines.length)) / 2 + L.font * 0.85;
+              ctx.font = `${L.font}px monospace`;
+              for (let i=0; i<L.lines.length; i++) {
+                ctx.fillText(L.lines[i], cx + rw/2, y0 + i*lh);
+              }
             }
           }
         }
-        ctx.fillStyle='#000'; ctx.font='14px sans-serif'; ctx.fillText('Légende: résultat → couleur', 8, H+16);
-        let lx=8, ly=H+28; for (let i=0; i<numberColorMap.length; i++) { const {value,color} = numberColorMap[i];
-          ctx.fillStyle=`rgb(${color[0]},${color[1]},${color[2]})`; ctx.strokeStyle='#333'; ctx.fillRect(lx,ly,18,18); ctx.strokeRect(lx,ly,18,18);
-          ctx.fillStyle='#000'; ctx.font='12px sans-serif'; ctx.fillText(`= ${value}`, lx+26, ly+14); lx+=120; if (lx>W-140) { lx=8; ly+=28; } }
+        if (showOps) {
+          ctx.fillStyle='#000'; ctx.font='14px sans-serif'; ctx.fillText('Légende: résultat → couleur', 8, H+16);
+          let lx=8, ly=H+28; for (let i=0; i<numberColorMap.length; i++) { const {value,color} = numberColorMap[i];
+            ctx.fillStyle=`rgb(${color[0]},${color[1]},${color[2]})`; ctx.strokeStyle='#333'; ctx.fillRect(lx,ly,18,18); ctx.strokeRect(lx,ly,18,18);
+            ctx.fillStyle='#000'; ctx.font='12px sans-serif'; ctx.fillText(`= ${value}`, lx+26, ly+14); lx+=120; if (lx>W-140) { lx=8; ly+=28; } }
+        }
         return canvas;
       }
 
@@ -544,6 +553,11 @@ const fs0 = Math.min(
                 <input type="range" min={-100} max={100} value={saturation} onChange={(e)=>setSaturation(parseInt(e.currentTarget.value))} className="w-full" />
               </div>
 
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={showOps} onChange={(e)=>setShowOps(e.currentTarget.checked)} />
+                <span className="text-sm">Afficher les calculs dans les cellules</span>
+              </label>
+
               <div className="flex gap-2">
                 <button type="button" onClick={openPNGInNewTab} className="px-3 py-2 rounded-xl bg-slate-700 text-white hover:opacity-90" disabled={!svgMarkup}>
                   Ouvrir PNG dans un onglet
@@ -614,4 +628,5 @@ const fs0 = Math.min(
   </script>
 </body>
 </html>
+
 
