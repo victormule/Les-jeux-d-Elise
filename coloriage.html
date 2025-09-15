@@ -1,0 +1,634 @@
+import React, { useEffect, useMemo, useRef, useState } from "react";
+
+/**
+ * Coloriage Magique – App React (fichier unique)
+ *
+ * Refonte simplifiée, fiable et autonome :
+ * - Images locales uniquement (input file).
+ * - Pixelisation + k-means palette, fusion de cellules, grille SVG avec opérations.
+ * - Contrôles : colonnes, couleurs, type d'opérations, taille des cases, fusion.
+ * - **NOUVEAU** : réglages **Contraste** et **Saturation** appliqués AVANT la quantification (réduit la plage de couleurs).
+ * - Export : suppression des tests, suppression de l'export SVG et du bouton d'export PNG.
+ *   → On garde uniquement **“Ouvrir PNG dans un onglet”** (clic droit → Enregistrer l'image sous...).
+ */
+
+// ------------------------------
+// Types & Helpers
+// ------------------------------
+type RGB = [number, number, number];
+
+type Rect = { x: number; y: number; w: number; h: number; k: number };
+
+type OpsMode = "add" | "addsub" | "mult" | "multdiv" | "mix";
+
+function clamp(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
+function mulberry32(a: number) {
+  return function () {
+    let t = (a += 0x6d2b79f5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function kmeans(points: RGB[], k: number, maxIter = 20, seedVal = 1) {
+  if (points.length === 0) return { centers: [] as RGB[], labels: [] as number[] };
+  k = clamp(k, 1, points.length);
+  const rand = mulberry32(seedVal);
+
+  // init centers au hasard parmi les points
+  const centers: RGB[] = [];
+  const used = new Set<number>();
+  while (centers.length < k) {
+    const idx = Math.floor(rand() * points.length);
+    if (!used.has(idx)) {
+      used.add(idx);
+      centers.push([...points[idx]] as RGB);
+    }
+  }
+
+  const labels = new Array(points.length).fill(0);
+  const dist2 = (a: RGB, b: RGB) => (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2;
+
+  for (let it = 0; it < maxIter; it++) {
+    let changed = false;
+    // Assignation
+    for (let i = 0; i < points.length; i++) {
+      let best = 0;
+      let bestd = Infinity;
+      for (let c = 0; c < centers.length; c++) {
+        const d = dist2(points[i], centers[c]);
+        if (d < bestd) {
+          bestd = d;
+          best = c;
+        }
+      }
+      if (labels[i] !== best) {
+        labels[i] = best;
+        changed = true;
+      }
+    }
+    // Recalcule des centres
+    const sums = Array.from({ length: k }, () => [0, 0, 0, 0]);
+    for (let i = 0; i < points.length; i++) {
+      const c = labels[i];
+      sums[c][0] += points[i][0];
+      sums[c][1] += points[i][1];
+      sums[c][2] += points[i][2];
+      sums[c][3] += 1;
+    }
+    for (let c = 0; c < k; c++) {
+      if (sums[c][3] > 0) {
+        centers[c] = [
+          sums[c][0] / sums[c][3],
+          sums[c][1] / sums[c][3],
+          sums[c][2] / sums[c][3],
+        ] as RGB;
+      }
+    }
+    if (!changed) break;
+  }
+  return { centers, labels };
+}
+
+function exprBankForResult(target: number, mode: OpsMode, rng: () => number): string[] {
+  const list: string[] = [];
+  const pushUnique = (s: string) => { if (!list.includes(s)) list.push(s); };
+
+  if (["add", "addsub", "mix"].includes(mode)) {
+    for (let a = 0; a <= target; a++) {
+      const b = target - a;
+      if (a >= 0 && b >= 0) pushUnique(`${a} + ${b}`);
+    }
+  }
+  if (["addsub", "mix"].includes(mode)) {
+    for (let a = target; a <= target + 20; a++) {
+      const b = a - target;
+      if (b >= 0) pushUnique(`${a} - ${b}`);
+    }
+  }
+  if (["mult", "multdiv", "mix"].includes(mode)) {
+    for (let a = 1; a <= 12; a++) {
+      if (target % a === 0) {
+        const b = target / a;
+        if (b >= 1 && b <= 12) pushUnique(`${a} × ${b}`);
+      }
+    }
+  }
+  if (["multdiv", "mix"].includes(mode)) {
+    for (let b = 1; b <= 12; b++) {
+      const a = target * b;
+      if (a <= 144) pushUnique(`${a} ÷ ${b}`);
+    }
+  }
+  for (let i = list.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [list[i], list[j]] = [list[j], list[i]];
+  }
+  return list;
+}
+
+function mergeRectangles(labels: number[], W: number, H: number): Rect[] {
+  const rects: Rect[] = [];
+  const visited = new Uint8Array(W * H);
+  const at = (x: number, y: number) => labels[y * W + x];
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const idx = y * W + x;
+      if (visited[idx]) continue;
+      const k = at(x, y);
+      let w = 1;
+      while (x + w < W && !visited[y * W + (x + w)] && at(x + w, y) === k) w++;
+      let h = 1;
+      let ok = true;
+      while (y + h < H && ok) {
+        for (let xx = 0; xx < w; xx++) {
+          if (visited[(y + h) * W + (x + xx)] || at(x + xx, y + h) !== k) {
+            ok = false;
+            break;
+          }
+        }
+        if (ok) h++;
+      }
+      for (let yy = 0; yy < h; yy++) {
+        for (let xx = 0; xx < w; xx++) visited[(y + yy) * W + (x + xx)] = 1;
+      }
+      rects.push({ x, y, w, h, k });
+    }
+  }
+  return rects;
+}
+
+function computeFontSize(expr: string, rw: number, rh: number): number {
+  const charCount = Math.max(1, expr.length);
+  const charWidthFactor = 0.6; // approx monospace
+  const maxByHeight = clamp(rh * 0.42, 10, 64);
+  const maxByWidth = clamp((rw * 0.9) / (charCount * charWidthFactor), 10, 64);
+  return Math.floor(Math.min(maxByHeight, maxByWidth));
+}
+
+function rgbToHex([r, g, b]: RGB) {
+  return `#${[r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+}
+
+// ------------------------------
+// Composant principal
+// ------------------------------
+export default function App() {
+  // Entrée / image
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [imageInfo, setImageInfo] = useState<{ name?: string; type?: string; size?: number } | null>(null);
+
+  // Paramètres
+  const [cols, setCols] = useState(40);
+  const [numColors, setNumColors] = useState(6);
+  const [opsMode, setOpsMode] = useState<OpsMode>("addsub");
+  const [seed, setSeed] = useState(1234);
+  const [cellPx, setCellPx] = useState(36);
+  const [mergeSameColor, setMergeSameColor] = useState(true);
+  const [contrast, setContrast] = useState(0);   // [-100..100]
+  const [saturation, setSaturation] = useState(0); // [-100..100]
+
+  // État calculé
+  const [processing, setProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [gridWidth, setGridWidth] = useState(0);
+  const [gridHeight, setGridHeight] = useState(0);
+  const [cellAssignments, setCellAssignments] = useState<number[]>([]);
+  const [palette, setPalette] = useState<RGB[]>([]);
+
+  const workCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const previewCanvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // Lecture fichier -> dataURL (images locales uniquement)
+  const SUPPORTED_MIME = new Set(["image/png", "image/jpeg", "image/webp", "image/gif", "image/bmp"]);
+  function readFileAsDataURL(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onerror = () => reject(new Error("Impossible de lire le fichier (FileReader)."));
+      fr.onload = () => resolve(String(fr.result));
+      fr.readAsDataURL(file);
+    });
+  }
+  async function onFile(file: File) {
+    try {
+      setError(null);
+      if (!SUPPORTED_MIME.has(file.type)) {
+        setError(`Format non supporté (${file.type || "inconnu"}). Utilise PNG, JPEG, WEBP, GIF ou BMP.`);
+        return;
+      }
+      const dataUrl = await readFileAsDataURL(file);
+      setImageInfo({ name: file.name, type: file.type, size: file.size });
+      setImageUrl(dataUrl);
+    } catch (e: any) {
+      console.error(e);
+      setError(e?.message || "Impossible de lire le fichier sélectionné.");
+    }
+  }
+
+  // Charger la dataURL dans un <img>
+  async function loadImage(url: string): Promise<HTMLImageElement> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.decoding = "async";
+      img.onload = async () => {
+        try {
+          if (typeof (img as any).decode === "function") await (img as any).decode();
+          if ((img.naturalWidth || img.width) === 0) return reject(new Error("Image sans dimensions."));
+          resolve(img);
+        } catch (err) {
+          if ((img.naturalWidth || img.width) > 0) resolve(img);
+          else reject(new Error("Échec du décodage de l'image."));
+        }
+      };
+      img.onerror = () => reject(new Error("Impossible de charger l'image (fichier illisible)."));
+      img.src = url;
+    });
+  }
+
+  // Ajustements image : contraste & saturation
+  function applyContrastSaturation(imgData: ImageData, contrastVal: number, saturationVal: number) {
+    const d = imgData.data;
+    // Contrast factor (Photoshop-like): C in [-100..100]
+    const C = clamp(contrastVal, -100, 100);
+    const cf = (259 * (C + 255)) / (255 * (259 - C));
+
+    // Saturation factor: S in [-100..100] -> sf in [0..2]
+    const S = clamp(saturationVal, -100, 100);
+    const sf = 1 + S / 100; // 0 (désaturé) → 2 (surdosé)
+
+    for (let i = 0; i < d.length; i += 4) {
+      // contraste par canal autour de 128
+      let r = cf * (d[i] - 128) + 128;
+      let g = cf * (d[i + 1] - 128) + 128;
+      let b = cf * (d[i + 2] - 128) + 128;
+
+      // saturation via interpolation vers la luminance
+      const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      r = luma + (r - luma) * sf;
+      g = luma + (g - luma) * sf;
+      b = luma + (b - luma) * sf;
+
+      d[i] = clamp(Math.round(r), 0, 255);
+      d[i + 1] = clamp(Math.round(g), 0, 255);
+      d[i + 2] = clamp(Math.round(b), 0, 255);
+    }
+    return imgData;
+  }
+
+  // Traitement principal (à chaque changement de paramètres/image)
+  useEffect(() => {
+    let cancelled = false;
+    async function process() {
+      if (!imageUrl) return;
+      setProcessing(true);
+      setError(null);
+      try {
+        const img = await loadImage(imageUrl);
+        if (cancelled) return;
+        const iw = img.naturalWidth || (img as any).width || 0;
+        const ih = img.naturalHeight || (img as any).height || 0;
+        if (iw === 0 || ih === 0) throw new Error("Dimensions d'image invalides.");
+
+        const ratio = ih / iw || 1;
+        const gw = clamp(Math.min(cols, iw), 4, Math.max(4, iw));
+        const gh = clamp(Math.round(gw * ratio), 4, Math.max(4, ih));
+        setGridWidth(gw);
+        setGridHeight(gh);
+
+        const canvas = workCanvasRef.current;
+        if (!canvas) throw new Error("Canvas de travail introuvable.");
+        const ctx = canvas.getContext("2d");
+        if (!ctx) throw new Error("Contexte 2D non disponible.");
+        canvas.width = gw;
+        canvas.height = gh;
+        ctx.clearRect(0, 0, gw, gh);
+        ctx.drawImage(img, 0, 0, gw, gh);
+
+        let imgData: ImageData;
+        try {
+          imgData = ctx.getImageData(0, 0, gw, gh);
+        } catch {
+          throw new Error("Impossible de lire les pixels. Choisis un autre fichier (PNG/JPEG/WEBP).");
+        }
+        // >>> Ajustements avant pixelisation (réduction de la plage de couleurs)
+        imgData = applyContrastSaturation(imgData, contrast, saturation);
+        // Réécrire l'image ajustée sur le canvas de travail (utile si on veut un futur aperçu du pré-traitement)
+        ctx.putImageData(imgData, 0, 0);
+
+        const points: RGB[] = new Array(gw * gh);
+        for (let y = 0; y < gh; y++) {
+          for (let x = 0; x < gw; x++) {
+            const i = (y * gw + x) * 4;
+            points[y * gw + x] = [imgData.data[i], imgData.data[i + 1], imgData.data[i + 2]];
+          }
+        }
+
+        const { centers, labels } = kmeans(points, numColors, 24, seed);
+        if (cancelled) return;
+        setPalette(centers.map((c) => [Math.round(c[0]), Math.round(c[1]), Math.round(c[2])] as RGB));
+        setCellAssignments(labels);
+      } catch (e: any) {
+        console.error(e);
+        setError(e?.message || "Échec du traitement de l'image.");
+      } finally {
+        if (!cancelled) setProcessing(false);
+      }
+    }
+    process();
+    return () => { cancelled = true; };
+  }, [imageUrl, cols, numColors, seed, contrast, saturation]);
+
+  // Mappage résultat -> couleur palette (2..N+1)
+  const numberColorMap = useMemo(() => {
+    return palette.map((color, i) => ({ value: i + 2, color }));
+  }, [palette]);
+
+  // SVG de la grille (cases fusionnées + opérations centrées)
+  const svgMarkup = useMemo(() => {
+    if (!gridWidth || !gridHeight || cellAssignments.length === 0 || palette.length === 0) return "";
+
+    const rng = mulberry32(seed);
+    const cellSize = clamp(cellPx, 16, 200);
+    const Wpx = gridWidth * cellSize;
+    const Hpx = gridHeight * cellSize;
+    const LEGEND_H = 120;
+
+    // Préparer banques d'expressions
+    const exprBank: Record<number, string[]> = {};
+    for (const e of numberColorMap) exprBank[e.value] = exprBankForResult(e.value, opsMode, rng);
+
+    const rects: Rect[] = mergeSameColor
+      ? mergeRectangles(cellAssignments, gridWidth, gridHeight)
+      : cellAssignments.map((k, i) => ({ x: i % gridWidth, y: Math.floor(i / gridWidth), w: 1, h: 1, k }));
+
+    let s = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+    s += `<svg xmlns='http://www.w3.org/2000/svg' width='${Wpx}' height='${Hpx + LEGEND_H}' viewBox='0 0 ${Wpx} ${Hpx + LEGEND_H}'>`;
+    s += `<rect x='0' y='0' width='${Wpx}' height='${Hpx + LEGEND_H}' fill='white'/>`;
+
+    for (const r of rects) {
+      const cx = r.x * cellSize;
+      const cy = r.y * cellSize;
+      const rw = r.w * cellSize;
+      const rh = r.h * cellSize;
+      const resultVal = numberColorMap[r.k]?.value ?? 0;
+      const exprs = exprBank[resultVal] || [String(resultVal)];
+      const expr = exprs[(r.x + r.y + r.k) % exprs.length];
+      const fs = computeFontSize(expr, rw, rh);
+      s += `<rect x='${cx}' y='${cy}' width='${rw}' height='${rh}' fill='none' stroke='black' stroke-width='1'/>`;
+      s += `<text x='${cx + rw / 2}' y='${cy + rh / 2}' font-family='monospace' font-size='${fs}' text-anchor='middle' dominant-baseline='middle'>${expr}</text>`;
+    }
+
+    // Légende
+    const legendY = Hpx + 16;
+    s += `<g>`;
+    s += `<text x='8' y='${legendY}' font-family='sans-serif' font-size='14' font-weight='bold'>Légende: résultat → couleur</text>`;
+    let lx = 8;
+    let ly = legendY + 12;
+    for (let i = 0; i < numberColorMap.length; i++) {
+      const { value, color } = numberColorMap[i];
+      s += `<rect x='${lx}' y='${ly}' width='18' height='18' fill='${rgbToHex(color)}' stroke='#333'/>`;
+      s += `<text x='${lx + 26}' y='${ly + 14}' font-family='sans-serif' font-size='12'>= ${value}</text>`;
+      lx += 120;
+      if (lx > Wpx - 140) { lx = 8; ly += 28; }
+    }
+    s += `</g>`;
+
+    s += `</svg>`;
+    return s;
+  }, [gridWidth, gridHeight, cellAssignments, palette, opsMode, numberColorMap, seed, mergeSameColor, cellPx]);
+
+  // Aperçu coloré (canvas)
+  useEffect(() => {
+    if (!gridWidth || !gridHeight || cellAssignments.length === 0 || palette.length === 0) return;
+    const canvas = previewCanvasRef.current;
+    if (!canvas) return;
+    const cs = 6;
+    const W = gridWidth * cs;
+    const H = gridHeight * cs;
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    for (let y = 0; y < gridHeight; y++) {
+      for (let x = 0; x < gridWidth; x++) {
+        const idx = y * gridWidth + x;
+        const k = cellAssignments[idx];
+        const [r, g, b] = palette[k];
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+        ctx.fillRect(x * cs, y * cs, cs, cs);
+      }
+    }
+  }, [gridWidth, gridHeight, cellAssignments, palette]);
+
+  // Rendu de la grille sur Canvas (utilisé pour PNG dans un onglet)
+  function renderGridToCanvas(scale = 2): HTMLCanvasElement | null {
+    if (!gridWidth || !gridHeight || cellAssignments.length === 0 || palette.length === 0) return null;
+
+    const cellSize = clamp(cellPx, 16, 200);
+    const W = gridWidth * cellSize;
+    const H = gridHeight * cellSize;
+    const LEGEND_H = 120;
+
+    const rects: Rect[] = mergeSameColor
+      ? mergeRectangles(cellAssignments, gridWidth, gridHeight)
+      : cellAssignments.map((k, i) => ({ x: i % gridWidth, y: Math.floor(i / gridWidth), w: 1, h: 1, k }));
+
+    const results = numberColorMap.map((e) => e.value);
+    const rng = mulberry32(seed);
+    const exprBank: Record<number, string[]> = {};
+    for (const r of results) exprBank[r] = exprBankForResult(r, opsMode, rng);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.floor(W * scale));
+    canvas.height = Math.max(1, Math.floor((H + LEGEND_H) * scale));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+
+    ctx.scale(scale, scale);
+    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, W, H + LEGEND_H);
+
+    ctx.strokeStyle = "#000";
+    for (const r of rects) {
+      const cx = r.x * cellSize;
+      const cy = r.y * cellSize;
+      const rw = r.w * cellSize;
+      const rh = r.h * cellSize;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(cx + 0.5, cy + 0.5, rw - 1, rh - 1);
+
+      const val = numberColorMap[r.k]?.value ?? 0;
+      const exprs = exprBank[val] || [String(val)];
+      const expr = exprs[(r.x + r.y + r.k) % exprs.length];
+      const fs = computeFontSize(expr, rw, rh);
+      ctx.font = `${fs}px monospace`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = "#000";
+      ctx.fillText(expr, cx + rw / 2, cy + rh / 2);
+    }
+
+    // Légende
+    ctx.fillStyle = "#000"; ctx.font = `14px sans-serif`;
+    ctx.fillText("Légende: résultat → couleur", 8, H + 16);
+    let lx = 8, ly = H + 28;
+    for (let i = 0; i < numberColorMap.length; i++) {
+      const { value, color } = numberColorMap[i];
+      ctx.fillStyle = `rgb(${color[0]},${color[1]},${color[2]})`;
+      ctx.strokeStyle = "#333";
+      ctx.fillRect(lx, ly, 18, 18);
+      ctx.strokeRect(lx, ly, 18, 18);
+      ctx.fillStyle = "#000"; ctx.font = `12px sans-serif`;
+      ctx.fillText(`= ${value}`, lx + 26, ly + 14);
+      lx += 120; if (lx > W - 140) { lx = 8; ly += 28; }
+    }
+
+    return canvas;
+  }
+
+  function openPNGInNewTab() {
+    const canvas = renderGridToCanvas(2);
+    if (!canvas) { setError("Échec export PNG: canvas non rendu."); return; }
+    const dataURL = canvas.toDataURL("image/png");
+    const w = window.open();
+    if (w) { w.document.write(`<img src="${dataURL}" style="width:100%;height:auto;"/>`); w.document.close(); }
+  }
+
+  // ------------------------------
+  // UI
+  // ------------------------------
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-900">
+      <div className="max-w-6xl mx-auto p-6">
+        <h1 className="text-3xl font-bold mb-2">Coloriage magique à partir d'une image</h1>
+        <p className="mb-4 text-slate-600">
+          Charge une image locale, choisis la taille de grille, le nombre de couleurs et le type d'opérations. Le site génère une
+          grille de calculs dont le résultat correspond à une couleur dans la légende. PNG ouvrable dans un onglet pour l'enregistrer.
+        </p>
+
+        <div className="grid md:grid-cols-3 gap-6">
+          {/* Panneau gauche : paramètres */}
+          <div className="md:col-span-1 bg-white rounded-2xl shadow p-4 space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-2">Image (PNG, JPEG, WEBP, GIF, BMP)</label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const f = e.currentTarget.files?.[0];
+                  if (f) onFile(f);
+                  (e.currentTarget as HTMLInputElement).value = ""; // re-sélect. autorisée
+                }}
+                className="block w-full text-sm"
+              />
+              {imageInfo && (
+                <p className="mt-1 text-xs text-slate-500">
+                  Sélection : {imageInfo.name || "-"} ({imageInfo.type || "-"}
+                  {imageInfo.size ? `, ${Math.round(imageInfo.size / 1024)} Ko` : ""})
+                </p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium">Colonnes de la grille : {cols}</label>
+              <input type="range" min={10} max={120} value={cols} onChange={(e) => setCols(parseInt(e.currentTarget.value))} className="w-full" />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium">Nombre de couleurs : {numColors}</label>
+              <input type="range" min={2} max={12} value={numColors} onChange={(e) => setNumColors(parseInt(e.currentTarget.value))} className="w-full" />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Type d'opérations</label>
+              <select className="w-full border rounded-lg p-2" value={opsMode} onChange={(e) => setOpsMode(e.currentTarget.value as OpsMode)}>
+                <option value="add">Additions</option>
+                <option value="addsub">Additions & soustractions</option>
+                <option value="mult">Multiplications</option>
+                <option value="multdiv">Multiplications & divisions</option>
+                <option value="mix">Mélange (toutes)</option>
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium">Taille des cases (px) : {cellPx}</label>
+                <input type="range" min={16} max={120} value={cellPx} onChange={(e) => setCellPx(parseInt(e.currentTarget.value))} className="w-full" />
+              </div>
+              <label className="flex items-center gap-2 mt-6">
+                <input type="checkbox" checked={mergeSameColor} onChange={(e) => setMergeSameColor(e.currentTarget.checked)} />
+                <span className="text-sm">Fusionner cellules identiques</span>
+              </label>
+            </div>
+
+            {/* Pré-traitement image */}
+            <div>
+              <label className="block text-sm font-medium">Contraste : {contrast}</label>
+              <input type="range" min={-100} max={100} value={contrast} onChange={(e) => setContrast(parseInt(e.currentTarget.value))} className="w-full" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium">Saturation : {saturation}</label>
+              <input type="range" min={-100} max={100} value={saturation} onChange={(e) => setSaturation(parseInt(e.currentTarget.value))} className="w-full" />
+            </div>
+
+            <div className="flex gap-2">
+              {/* Export PNG supprimé. On ouvre dans un onglet pour l'enregistrer manuellement. */}
+              <button type="button" onClick={openPNGInNewTab} className="px-3 py-2 rounded-xl bg-slate-700 text-white hover:opacity-90" disabled={!svgMarkup}>
+                Ouvrir PNG dans un onglet
+              </button>
+            </div>
+
+            {processing && <div className="text-sm text-amber-600">Traitement en cours…</div>}
+            {error && <div className="text-sm text-red-600">{error}</div>}
+          </div>
+
+          {/* Panneau centre : aperçu coloré */}
+          <div className="md:col-span-1 bg-white rounded-2xl shadow p-4">
+            <h2 className="font-semibold mb-2">Aperçu coloré (palette réduite)</h2>
+            {imageUrl ? (
+              <canvas ref={previewCanvasRef} className="w-full h-auto border rounded-lg" />
+            ) : (
+              <div className="text-sm text-slate-500">Importe une image pour voir l'aperçu.</div>
+            )}
+          </div>
+
+          {/* Panneau droite : grille à colorier (SVG) */}
+          <div className="md:col-span-1 bg-white rounded-2xl shadow p-4">
+            <h2 className="font-semibold mb-2">Grille à colorier (SVG)</h2>
+            {svgMarkup ? (
+              <div className="border rounded-lg overflow-auto max-h-[60vh] p-2 bg-slate-50">
+                <div dangerouslySetInnerHTML={{ __html: svgMarkup }} />
+              </div>
+            ) : (
+              <div className="text-sm text-slate-500">La grille s'affichera ici.</div>
+            )}
+          </div>
+        </div>
+
+        {/* Canvas caché (travail) */}
+        <canvas ref={workCanvasRef} className="hidden" />
+
+        {/* Palette affichée */}
+        {palette.length > 0 && (
+          <div className="mt-6 bg-white rounded-2xl shadow p-4">
+            <h3 className="font-semibold mb-2">Palette détectée ({palette.length})</h3>
+            <div className="flex flex-wrap gap-3">
+              {palette.map((c, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded border" style={{ backgroundColor: `rgb(${c[0]},${c[1]},${c[2]})` }} />
+                  <span className="text-xs text-slate-600">{i + 2}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-slate-500 mt-2">
+              La légende associe chaque couleur à un résultat (2, 3, 4, …). Les opérations dans les cases mènent à ces résultats.
+              Ajuste le type d'opérations, le nombre de couleurs et la taille de grille selon ton besoin.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
