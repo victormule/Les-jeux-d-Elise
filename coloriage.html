@@ -54,8 +54,8 @@
         for (let i=0; i<points.length; i++) {
           let best = 0, bestd = Infinity;
           for (let c=0; c<centers.length; c++) {
-            const d = dist2(points[i], centers[c]);
-            if (d < bestd) { bestd = d; best = c; }
+            const d2 = dist2(points[i], centers[c]);
+            if (d2 < bestd) { bestd = d2; best = c; }
           }
           if (labels[i] !== best) { labels[i] = best; changed = true; }
         }
@@ -129,7 +129,7 @@
             for (let a=1; a<=lim; a++) for (let b=1; b<=lim; b++) for (let c=0; c<=maxN; c++) {
               const prod = a*b;
               const dAdd = target - prod - c; if (dAdd>=0 && dAdd<=maxN) pushUnique(`${a} × ${b} + ${c} + ${dAdd}`);
-              const dSub = prod + c - target; if (dSub>=0 && d<=maxN) pushUnique(`${a} × ${b} + ${c} - ${dSub}`);
+              const dSub = prod + c - target; if (dSub>=0 && dSub<=maxN) pushUnique(`${a} × ${b} + ${c} - ${dSub}`);
               const dSub2 = prod - c - target; if (dSub2>=0 && dSub2<=maxN) pushUnique(`${a} × ${b} - ${c} - ${dSub2}`);
             }
             for (let a=1; a<=lim; a++) for (let b=1; b<=lim; b++) for (let c=1; c<=lim; c++) {
@@ -249,7 +249,7 @@
       const [mergeSameColor, setMergeSameColor] = useState(true);
       const [contrast, setContrast] = useState(0);
       const [saturation, setSaturation] = useState(0);
-      const [showOps, setShowOps] = useState(true); // <— bascule simple : afficher/masquer les calculs
+      const [showOps, setShowOps] = useState(true); // bascule calculs
 
       const [processing, setProcessing] = useState(false);
       const [error, setError] = useState(null);
@@ -295,22 +295,22 @@
       });
 
       function applyContrastSaturation(imgData, contrastVal, saturationVal) {
-        const d = imgData.data;
+        const data = imgData.data;
         const C = clamp(contrastVal, -100, 100);
         const cf = (259 * (C + 255)) / (255 * (259 - C));
         const S = clamp(saturationVal, -100, 100);
         const sf = 1 + S / 100;
-        for (let i=0; i<d.length; i+=4) {
-          let r = cf * (d[i] - 128) + 128;
-          let g = cf * (d[i+1] - 128) + 128;
-          let b = cf * (d[i+2] - 128) + 128;
+        for (let i=0; i<data.length; i+=4) {
+          let r = cf * (data[i] - 128) + 128;
+          let g = cf * (data[i+1] - 128) + 128;
+          let b = cf * (data[i+2] - 128) + 128;
           const luma = 0.2126*r + 0.7152*g + 0.0722*b;
           r = luma + (r - luma) * sf;
           g = luma + (g - luma) * sf;
           b = luma + (b - luma) * sf;
-          d[i]   = clamp(Math.round(r), 0, 255);
-          d[i+1] = clamp(Math.round(g), 0, 255);
-          d[i+2] = clamp(Math.round(b), 0, 255);
+          data[i]   = clamp(Math.round(r), 0, 255);
+          data[i+1] = clamp(Math.round(g), 0, 255);
+          data[i+2] = clamp(Math.round(b), 0, 255);
         }
         return imgData;
       }
@@ -493,8 +493,11 @@
           <h1 className="text-3xl font-bold mb-2">Coloriage magique à partir d'une image</h1>
           <p className="mb-4 text-slate-600">Charge une image locale, ajuste contraste/saturation, choisis les opérations et la difficulté. Tu peux aussi <strong>modifier le résultat</strong> associé à chaque couleur (nombres grands possibles). Le texte s'ajuste automatiquement (horizontal ou vertical) avec un léger padding.</p>
 
+          {/* Layout: colonne gauche = import + aperçu + réglages ; bloc droit = grille (span 2) */}
           <div className="grid md:grid-cols-3 gap-6">
+            {/* Colonne gauche */}
             <div className="md:col-span-1 bg-white rounded-2xl shadow p-4 space-y-4">
+              {/* Import */}
               <div>
                 <label className="block text-sm font-medium mb-2">Image (PNG, JPEG, WEBP, GIF, BMP)</label>
                 <input type="file" accept="image/*" onChange={(e)=>{ const f=e.currentTarget.files?.[0]; if(f) onFile(f); e.currentTarget.value=''; }} className="block w-full text-sm" />
@@ -503,6 +506,17 @@
                 )}
               </div>
 
+              {/* Aperçu directement sous l'import */}
+              <div>
+                <h2 className="font-semibold mb-2">Aperçu coloré (palette réduite)</h2>
+                {imageUrl ? (
+                  <canvas ref={previewCanvasRef} className="w-full h-auto border rounded-lg" />
+                ) : (
+                  <div className="text-sm text-slate-500">Importe une image pour voir l'aperçu.</div>
+                )}
+              </div>
+
+              {/* Réglages ensuite */}
               <div>
                 <label className="block text-sm font-medium">Colonnes de la grille : {cols}</label>
                 <input type="range" min={10} max={120} value={cols} onChange={(e)=>setCols(parseInt(e.currentTarget.value))} className="w-full" />
@@ -568,19 +582,11 @@
               {error && <div className="text-sm text-red-600">{error}</div>}
             </div>
 
-            <div className="md:col-span-1 bg-white rounded-2xl shadow p-4">
-              <h2 className="font-semibold mb-2">Aperçu coloré (palette réduite)</h2>
-              {imageUrl ? (
-                <canvas ref={previewCanvasRef} className="w-full h-auto border rounded-lg" />
-              ) : (
-                <div className="text-sm text-slate-500">Importe une image pour voir l'aperçu.</div>
-              )}
-            </div>
-
-            <div className="md:col-span-1 bg-white rounded-2xl shadow p-4">
+            {/* Bloc droit = 2 colonnes fusionnées pour la grille */}
+            <div className="md:col-span-2 bg-white rounded-2xl shadow p-4">
               <h2 className="font-semibold mb-2">Grille à colorier (SVG)</h2>
               {svgMarkup ? (
-                <div className="border rounded-lg overflow-auto max-h-[60vh] p-2 bg-slate-50">
+                <div className="border rounded-lg overflow-auto max-h-[70vh] p-2 bg-slate-50">
                   <div dangerouslySetInnerHTML={{ __html: svgMarkup }} />
                 </div>
               ) : (
@@ -623,10 +629,30 @@
       );
     }
 
+    // --- Mini tests optionnels (désactivés par défaut) ---
+    const DEV_TESTS = false; // passe à true pour lancer de petits tests dans la console
+    function runDevTests() {
+      try {
+        const rng = mulberry32(42);
+        const modes = ['add','addsub','mult','multdiv','mix'];
+        const diffs = ['facile','moyen','difficile'];
+        for (const mode of modes) {
+          for (const diff of diffs) {
+            const bank = exprBankForResult(12, mode, rng, diff);
+            console.assert(Array.isArray(bank), 'bank doit être un array');
+            console.assert(bank.length > 0 || !mode, `banque vide pour ${mode} ${diff}`);
+          }
+        }
+        console.log('[DEV_TESTS] OK');
+      } catch (e) {
+        console.error('[DEV_TESTS] Échec:', e);
+      }
+    }
+    if (DEV_TESTS) runDevTests();
+
     const root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(<App />);
   </script>
 </body>
 </html>
-
 
