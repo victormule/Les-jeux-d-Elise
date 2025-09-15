@@ -199,7 +199,7 @@ function layoutExpression(expr, rw, rh) {
   const isOp = (t) => t === '+' || t === '-' || t === '×' || t === '÷';
 
   for (
-    let fs = Math.min(128, Math.max(6, Math.floor(availH * 0.42)));
+    let fs = Math.min(50, Math.max(6, Math.floor(availH * 0.42)));
     fs >= 6;
     fs--
   ) {
