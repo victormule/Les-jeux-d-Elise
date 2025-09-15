@@ -27,6 +27,7 @@
 
   <script type="text/babel">
     const { useEffect, useMemo, useRef, useState } = React;
+const MAX_FONT_SIZE = 14;
 
     // ------------------------------ Helpers ------------------------------
     const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
@@ -178,15 +179,15 @@
 
       // 1) Horizontale
       {
-        const fs0 = Math.max(
-          6,
-          Math.floor(
-            Math.min(
-              availH * 0.42,
-              (availW / Math.max(1, expr.length)) / 0.6
-            )
-          )
-        );
+const fs0 = Math.max(
+  6,
+  Math.floor(
+    Math.min(
+      availH * 0.42,
+      (availW / Math.max(1, expr.length)) / 0.6
+    )
+  )
+);
         if (fs0 >= 10 && estWidth(expr, fs0) <= availW) {
           return { mode: 'h', lines: [expr], font: fs0, pad };
         }
@@ -196,11 +197,11 @@
       const tokens = expr.split(/\s+/).filter(Boolean);
       const isOp = (t) => t === '+' || t === '-' || t === '×' || t === '÷';
 
-      for (
-        let fs = Math.min(128, Math.max(6, Math.floor(availH * 0.42)));
-        fs >= 6;
-        fs--
-      ) {
+  for (
+  let fs = Math.min(128, Math.max(6, Math.floor(availH * 0.42)));
+  fs >= 6;
+  fs--
+) {
         const lines = [];
         let current = '';
 
