@@ -14,6 +14,9 @@
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <style>
     html, body { height: 100%; }
+    input[type="number"]::-webkit-outer-spin-button,
+    input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type="number"] { -moz-appearance: textfield; }
   </style>
 </head>
 <body class="min-h-screen bg-slate-50 text-slate-900">
@@ -67,22 +70,78 @@
       return { centers, labels };
     }
 
-    function exprBankForResult(target, mode, rng) {
+    // Générateur d'expressions selon la difficulté & le mode — jamais de résultat négatif, divisions exactes uniquement.
+    function exprBankForResult(target, mode, rng, difficulty = 'facile') {
       const list = [];
       const pushUnique = (s) => { if (!list.includes(s)) list.push(s); };
-      if (["add","addsub","mix"].includes(mode)) {
-        for (let a=0; a<=target; a++) { const b = target-a; if (a>=0 && b>=0) pushUnique(`${a} + ${b}`); }
+
+      // 2 termes de base
+      const add2 = () => { for (let a=0; a<=target; a++){ const b = target - a; if (b>=0) pushUnique(`${a} + ${b}`);} };
+      const sub2 = () => { for (let a=target; a<=target+40; a++){ const b = a - target; if (b>=0) pushUnique(`${a} - ${b}`);} };
+      const mult2 = () => { for (let a=1; a<=20; a++){ if (target % a === 0){ const b = target / a; if (b>=1 && b<=20) pushUnique(`${a} × ${b}`);} } };
+      const div2  = () => { for (let b=1; b<=20; b++){ const a = target * b; if (a<=800) pushUnique(`${a} ÷ ${b}`);} };
+
+      if (["add","addsub","mix"].includes(mode)) add2();
+      if (["addsub","mix"].includes(mode))       sub2();
+      if (["mult","multdiv","mix"].includes(mode)) mult2();
+      if (["multdiv","mix"].includes(mode))        div2();
+
+      const maxN = difficulty === 'facile' ? 0 : (difficulty === 'moyen' ? 12 : 20);
+      if (maxN > 0) {
+        // 3 termes (>=0)
+        if (["add","addsub","mix"].includes(mode)) {
+          for (let a=0; a<=maxN; a++) for (let b=0; b<=maxN; b++) {
+            const c = target - a - b; if (c>=0 && c<=maxN) pushUnique(`${a} + ${b} + ${c}`);
+          }
+          if (difficulty === 'difficile') {
+            for (let a=0; a<=maxN; a++) for (let b=0; b<=maxN; b++) {
+              const c = a + b - target; if (c>=0 && c<=maxN) pushUnique(`${a} + ${b} - ${c}`);
+            }
+          }
+        }
+        if (["mult","multdiv","mix"].includes(mode)) {
+          const lim = Math.max(12, Math.min(20, maxN));
+          for (let a=1; a<=lim; a++) for (let b=1; b<=lim; b++) {
+            const prod = a*b;
+            const cAdd = target - prod; if (cAdd>=0 && cAdd<=maxN) pushUnique(`${a} × ${b} + ${cAdd}`);
+            const cSub = prod - target; if (cSub>=0 && cSub<=maxN) pushUnique(`${a} × ${b} - ${cSub}`);
+          }
+        }
+        if (difficulty === 'difficile' && ["mult","multdiv","mix"].includes(mode)) {
+          for (let a=1; a<=12; a++) for (let b=1; b<=12; b++) for (let c=1; c<=12; c++) {
+            if (a*b % c === 0 && (a*b)/c === target) pushUnique(`(${a} × ${b}) ÷ ${c}`);
+          }
+        }
+
+        // 4 termes (difficile) — >= 0
+        if (difficulty === 'difficile') {
+          if (["add","addsub","mix"].includes(mode)) {
+            for (let a=0; a<=maxN; a++) for (let b=0; b<=maxN; b++) for (let c=0; c<=maxN; c++) {
+              const d = target - a - b - c; if (d>=0 && d<=maxN) pushUnique(`${a} + ${b} + ${c} + ${d}`);
+            }
+            for (let a=0; a<=maxN; a++) for (let b=0; b<=maxN; b++) for (let c=0; c<=maxN; c++) {
+              const d = a + b + c - target; if (d>=0 && d<=maxN) pushUnique(`${a} + ${b} + ${c} - ${d}`);
+            }
+          }
+          if (["mult","multdiv","mix"].includes(mode)) {
+            const lim = 12;
+            for (let a=1; a<=lim; a++) for (let b=1; b<=lim; b++) for (let c=0; c<=maxN; c++) {
+              const prod = a*b;
+              const dAdd = target - prod - c; if (dAdd>=0 && dAdd<=maxN) pushUnique(`${a} × ${b} + ${c} + ${dAdd}`);
+              const dSub = prod + c - target; if (dSub>=0 && dSub<=maxN) pushUnique(`${a} × ${b} + ${c} - ${dSub}`);
+              const dSub2 = prod - c - target; if (dSub2>=0 && dSub2<=maxN) pushUnique(`${a} × ${b} - ${c} - ${dSub2}`);
+            }
+            for (let a=1; a<=lim; a++) for (let b=1; b<=lim; b++) for (let c=1; c<=lim; c++) {
+              if (a*b % c === 0) {
+                const base = (a*b)/c;
+                const d = target - base; if (d>=0 && d<=maxN) pushUnique(`(${a} × ${b}) ÷ ${c} + ${d}`);
+              }
+            }
+          }
+        }
       }
-      if (["addsub","mix"].includes(mode)) {
-        for (let a=target; a<=target+20; a++) { const b=a-target; if (b>=0) pushUnique(`${a} - ${b}`); }
-      }
-      if (["mult","multdiv","mix"].includes(mode)) {
-        for (let a=1; a<=12; a++) if (target % a === 0) { const b = target/a; if (b>=1 && b<=12) pushUnique(`${a} × ${b}`); }
-      }
-      if (["multdiv","mix"].includes(mode)) {
-        for (let b=1; b<=12; b++) { const a = target*b; if (a<=144) pushUnique(`${a} ÷ ${b}`); }
-      }
-      for (let i=list.length-1; i>0; i--) { const j = Math.floor(rng()*(i+1)); [list[i],list[j]] = [list[j],list[i]]; }
+
+      for (let i=list.length-1; i>0; i--) { const j = Math.floor(rng()*(i+1)); [list[i], list[j]] = [list[j], list[i]]; }
       return list;
     }
 
@@ -106,13 +165,82 @@
     }
 
     const rgbToHex = ([r,g,b]) => `#${[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('')}`;
-    const computeFontSize = (expr, rw, rh) => {
-      const charCount = Math.max(1, expr.length);
-      const charWidthFactor = 0.6;
-      const maxByHeight = clamp(rh*0.42, 10, 64);
-      const maxByWidth = clamp((rw*0.9)/(charCount*charWidthFactor), 10, 64);
-      return Math.floor(Math.min(maxByHeight, maxByWidth));
-    };
+
+    // Mise en page: horizontal si ça tient, sinon vertical empilé (avec padding)
+// Mise en page intelligente : horizontal si possible,
+// sinon wrap vertical avec opérateurs sur leur propre ligne.
+// Si la cellule est trop petite (ex. 1 px), on n’affiche rien (mode: 'none').
+function layoutExpression(expr, rw, rh) {
+  const pad = Math.floor(0.08 * Math.min(rw, rh));
+  const availW = Math.max(1, rw - 2 * pad);
+  const availH = Math.max(1, rh - 2 * pad);
+
+  const estWidth = (text, fs) => Math.ceil((text.length || 1) * fs * 0.6);
+  const lineHeight = (fs) => Math.round(fs * 1.2);
+
+  // 1) Tentative horizontale si ça tient
+  {
+    const fs0 = Math.max(
+      6,
+      Math.floor(
+        Math.min(
+          availH * 0.42,
+          (availW / Math.max(1, expr.length)) / 0.6
+        )
+      )
+    );
+    if (fs0 >= 10 && estWidth(expr, fs0) <= availW) {
+      return { mode: 'h', lines: [expr], font: fs0, pad };
+    }
+  }
+
+  // 2) Verticale avec wrap par tokens et opérateurs sur leur propre ligne
+  const tokens = expr.split(/\s+/).filter(Boolean);
+  const isOp = (t) => t === '+' || t === '-' || t === '×' || t === '÷';
+
+  for (
+    let fs = Math.min(128, Math.max(6, Math.floor(availH * 0.42)));
+    fs >= 6;
+    fs--
+  ) {
+    const lines = [];
+    let current = '';
+
+    for (let i = 0; i < tokens.length; i++) {
+      const t = tokens[i];
+      const candidate = current ? current + ' ' + t : t;
+
+      if (estWidth(candidate, fs) <= availW) {
+        current = candidate;
+      } else {
+        if (current) lines.push(current);
+        if (isOp(t)) {
+          // centre l’opérateur tout seul sur une ligne
+          lines.push(t);
+          current = '';
+        } else {
+          current = t;
+          // même seul ne rentre pas => police trop grande pour la largeur
+          if (estWidth(current, fs) > availW) {
+            current = '';
+            break; // on descend la taille de police (boucle fs)
+          }
+        }
+      }
+    }
+    if (current) lines.push(current);
+    if (!lines.length) continue;
+
+    const totalH = lines.length * lineHeight(fs);
+    if (totalH <= availH) {
+      return { mode: 'v', lines, font: fs, pad };
+    }
+  }
+
+  // 3) Cellule minuscule : pas de rendu texte
+  return { mode: 'none', lines: [], font: 0, pad };
+}
+
 
     // ------------------------------ App ------------------------------
     function App() {
@@ -121,6 +249,7 @@
       const [cols, setCols] = useState(40);
       const [numColors, setNumColors] = useState(6);
       const [opsMode, setOpsMode] = useState("addsub");
+      const [difficulty, setDifficulty] = useState('facile'); // 'facile' | 'moyen' | 'difficile'
       const [seed, setSeed] = useState(1234);
       const [cellPx, setCellPx] = useState(36);
       const [mergeSameColor, setMergeSameColor] = useState(true);
@@ -133,6 +262,9 @@
       const [gridHeight, setGridHeight] = useState(0);
       const [cellAssignments, setCellAssignments] = useState([]);
       const [palette, setPalette] = useState([]);
+
+      // Résultats personnalisables par couleur
+      const [customResults, setCustomResults] = useState([]); // array de nombres (même longueur que palette)
 
       const workCanvasRef = useRef(null);
       const previewCanvasRef = useRef(null);
@@ -212,7 +344,13 @@
             for (let y=0; y<gh; y++) for (let x=0; x<gw; x++) { const i=(y*gw+x)*4; points[y*gw+x] = [imgData.data[i], imgData.data[i+1], imgData.data[i+2]]; }
             const { centers, labels } = kmeans(points, numColors, 24, seed);
             if (cancelled) return;
-            setPalette(centers.map(c => [Math.round(c[0]), Math.round(c[1]), Math.round(c[2])]));
+            const newPalette = centers.map(c => [Math.round(c[0]), Math.round(c[1]), Math.round(c[2])]);
+            setPalette(newPalette);
+            setCustomResults((prev) => {
+              const arr = prev.slice(0, newPalette.length);
+              for (let i=arr.length; i<newPalette.length; i++) arr[i] = i + 2;
+              return arr;
+            });
             setCellAssignments(labels);
           } catch (e) { console.error(e); setError(e?.message || "Échec du traitement de l'image."); }
           finally { if (!cancelled) setProcessing(false); }
@@ -220,8 +358,12 @@
         process(); return () => { cancelled = true; };
       }, [imageUrl, cols, numColors, seed, contrast, saturation]);
 
-      const numberColorMap = useMemo(() => palette.map((color, i) => ({ value: i+2, color })), [palette]);
+      // Mappage résultat -> couleur palette (valeurs modifiables)
+      const numberColorMap = useMemo(() => {
+        return palette.map((color, i) => ({ value: Math.max(0, Math.floor(customResults[i] ?? (i+2))), color }));
+      }, [palette, customResults]);
 
+      // SVG de la grille
       const svgMarkup = useMemo(() => {
         if (!gridWidth || !gridHeight || !cellAssignments.length || !palette.length) return "";
         const rng = mulberry32(seed);
@@ -230,7 +372,7 @@
         const Hpx = gridHeight * cellSize;
         const LEGEND_H = 120;
         const exprBank = {};
-        for (const e of numberColorMap) exprBank[e.value] = exprBankForResult(e.value, opsMode, rng);
+        for (const e of numberColorMap) exprBank[e.value] = exprBankForResult(e.value, opsMode, rng, difficulty);
         const rects = mergeSameColor
           ? mergeRectangles(cellAssignments, gridWidth, gridHeight)
           : cellAssignments.map((k, i) => ({ x: i%gridWidth, y: Math.floor(i/gridWidth), w:1, h:1, k }));
@@ -242,9 +384,19 @@
           const resultVal = (numberColorMap[r.k]?.value ?? 0);
           const exprs = exprBank[resultVal] || [String(resultVal)];
           const expr = exprs[(r.x + r.y + r.k) % exprs.length];
-          const fs = computeFontSize(expr, rw, rh);
+          const L = layoutExpression(expr, rw, rh);
           s += `<rect x='${cx}' y='${cy}' width='${rw}' height='${rh}' fill='none' stroke='black' stroke-width='1'/>`;
-          s += `<text x='${cx + rw/2}' y='${cy + rh/2}' font-family='monospace' font-size='${fs}' text-anchor='middle' dominant-baseline='middle'>${expr}</text>`;
+          if (L.mode === 'h') {
+            s += `<text x='${cx + rw/2}' y='${cy + rh/2}' font-family='monospace' font-size='${L.font}' text-anchor='middle' dominant-baseline='middle'>${expr}</text>`;
+          } else {
+            const lh = Math.round(L.font * 1.2);
+            const totalH = lh * L.lines.length;
+            let y0 = cy + (rh - totalH) / 2 + L.font * 0.85;
+            for (let i=0; i<L.lines.length; i++) {
+              const ly = y0 + i*lh;
+              s += `<text x='${cx + rw/2}' y='${ly}' font-family='monospace' font-size='${L.font}' text-anchor='middle' dominant-baseline='middle'>${L.lines[i]}</text>`;
+            }
+          }
         }
         const legendY = Hpx + 16;
         s += `<g>`;
@@ -259,8 +411,9 @@
         s += `</g>`;
         s += `</svg>`;
         return s;
-      }, [gridWidth, gridHeight, cellAssignments, palette, opsMode, numberColorMap, seed, mergeSameColor, cellPx]);
+      }, [gridWidth, gridHeight, cellAssignments, palette, opsMode, numberColorMap, seed, mergeSameColor, cellPx, difficulty]);
 
+      // Aperçu coloré (canvas)
       useEffect(() => {
         if (!gridWidth || !gridHeight || !cellAssignments.length || !palette.length) return;
         const canvas = previewCanvasRef.current; if (!canvas) return;
@@ -272,6 +425,7 @@
         }
       }, [gridWidth, gridHeight, cellAssignments, palette]);
 
+      // Rendu sur Canvas (pour PNG en onglet)
       function renderGridToCanvas(scale = 2) {
         if (!gridWidth || !gridHeight || !cellAssignments.length || !palette.length) return null;
         const cellSize = clamp(cellPx, 16, 200);
@@ -279,7 +433,7 @@
         const rects = mergeSameColor ? mergeRectangles(cellAssignments, gridWidth, gridHeight)
           : cellAssignments.map((k,i)=>({x:i%gridWidth, y:Math.floor(i/gridWidth), w:1, h:1, k}));
         const results = numberColorMap.map(e=>e.value);
-        const rng = mulberry32(seed); const exprBank = {}; for (const r of results) exprBank[r] = exprBankForResult(r, opsMode, rng);
+        const rng = mulberry32(seed); const exprBank = {}; for (const r of results) exprBank[r] = exprBankForResult(r, opsMode, rng, difficulty);
         const canvas = document.createElement('canvas'); canvas.width=Math.max(1,Math.floor(W*scale)); canvas.height=Math.max(1,Math.floor((H+LEGEND_H)*scale));
         const ctx = canvas.getContext('2d'); if (!ctx) return null;
         ctx.scale(scale, scale); ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H+LEGEND_H); ctx.strokeStyle='#000';
@@ -287,9 +441,20 @@
           const cx=r.x*cellSize, cy=r.y*cellSize, rw=r.w*cellSize, rh=r.h*cellSize;
           ctx.lineWidth = 1; ctx.strokeRect(cx+0.5, cy+0.5, rw-1, rh-1);
           const val = numberColorMap[r.k]?.value ?? 0; const exprs = exprBank[val] || [String(val)];
-          const expr = exprs[(r.x + r.y + r.k) % exprs.length]; const fs = computeFontSize(expr, rw, rh);
-          ctx.font = `${fs}px monospace`; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle='#000';
-          ctx.fillText(expr, cx+rw/2, cy+rh/2);
+          const expr = exprs[(r.x + r.y + r.k) % exprs.length];
+          const L = layoutExpression(expr, rw, rh);
+          ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle='#000';
+          if (L.mode === 'h') {
+            ctx.font = `${L.font}px monospace`;
+            ctx.fillText(expr, cx+rw/2, cy+rh/2);
+          } else {
+            const lh = Math.round(L.font * 1.2);
+            let y0 = cy + (rh - (lh * L.lines.length)) / 2 + L.font * 0.85;
+            ctx.font = `${L.font}px monospace`;
+            for (let i=0; i<L.lines.length; i++) {
+              ctx.fillText(L.lines[i], cx + rw/2, y0 + i*lh);
+            }
+          }
         }
         ctx.fillStyle='#000'; ctx.font='14px sans-serif'; ctx.fillText('Légende: résultat → couleur', 8, H+16);
         let lx=8, ly=H+28; for (let i=0; i<numberColorMap.length; i++) { const {value,color} = numberColorMap[i];
@@ -305,10 +470,23 @@
         const w = window.open(); if (w) { w.document.write(`<img src="${dataURL}" style="width:100%;height:auto;"/>`); w.document.close(); }
       }
 
+      // Gestion des changements manuels des résultats
+      function updateResultAt(i, val) {
+        setCustomResults((prev) => {
+          const next = prev.slice();
+          const n = Number(val);
+          next[i] = Number.isFinite(n) ? clamp(Math.round(n), 0, 9999) : (next[i] ?? i+2);
+          return next;
+        });
+      }
+      function resetResults() {
+        setCustomResults(palette.map((_, i) => i + 2));
+      }
+
       return (
         <div>
           <h1 className="text-3xl font-bold mb-2">Coloriage magique à partir d'une image</h1>
-          <p className="mb-4 text-slate-600">Charge une image locale, ajuste le contraste/saturation avant pixelisation pour réduire la plage de couleurs, choisis les paramètres et ouvre le PNG dans un onglet pour l'enregistrer.</p>
+          <p className="mb-4 text-slate-600">Charge une image locale, ajuste contraste/saturation, choisis les opérations et la difficulté. Tu peux aussi <strong>modifier le résultat</strong> associé à chaque couleur (nombres grands possibles). Le texte s'ajuste automatiquement (horizontal ou vertical) avec un léger padding.</p>
 
           <div className="grid md:grid-cols-3 gap-6">
             <div className="md:col-span-1 bg-white rounded-2xl shadow p-4 space-y-4">
@@ -338,6 +516,15 @@
                   <option value="mult">Multiplications</option>
                   <option value="multdiv">Multiplications & divisions</option>
                   <option value="mix">Mélange (toutes)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Niveau de difficulté</label>
+                <select className="w-full border rounded-lg p-2" value={difficulty} onChange={(e)=>setDifficulty(e.currentTarget.value)}>
+                  <option value="facile">Facile</option>
+                  <option value="moyen">Moyen</option>
+                  <option value="difficile">Difficile</option>
                 </select>
               </div>
 
@@ -396,16 +583,30 @@
 
           {palette.length > 0 && (
             <div className="mt-6 bg-white rounded-2xl shadow p-4">
-              <h3 className="font-semibold mb-2">Palette détectée ({palette.length})</h3>
-              <div className="flex flex-wrap gap-3">
+              <h3 className="font-semibold mb-3">Résultats par couleur</h3>
+              <div className="grid sm:grid-cols-2 gap-3">
                 {palette.map((c,i)=> (
-                  <div key={i} className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded border" style={{ backgroundColor: `rgb(${c[0]},${c[1]},${c[2]})` }} />
-                    <span className="text-xs text-slate-600">{i+2}</span>
-                  </div>
+                  <label key={i} className="flex items-center gap-3 p-2 rounded-lg border">
+                    <span className="inline-flex items-center gap-2 min-w-[88px]">
+                      <span className="w-6 h-6 rounded border" style={{ backgroundColor: `rgb(${c[0]},${c[1]},${c[2]})` }} />
+                      <span className="text-xs text-slate-600">Couleur {i+1}</span>
+                    </span>
+                    <span className="text-xs text-slate-500">Résultat :</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={9999}
+                      value={customResults[i] ?? (i+2)}
+                      onChange={(e)=>updateResultAt(i, e.currentTarget.value)}
+                      className="w-24 px-2 py-1 border rounded-md text-sm"
+                    />
+                  </label>
                 ))}
               </div>
-              <p className="text-xs text-slate-500 mt-2">La légende associe chaque couleur à un résultat (2, 3, 4, …). Les opérations mènent à ces résultats.</p>
+              <div className="mt-3 flex gap-2">
+                <button onClick={resetResults} className="px-3 py-1.5 rounded-md bg-slate-100 hover:bg-slate-200 border">Réinitialiser</button>
+              </div>
+              <p className="text-xs text-slate-500 mt-3">Ces valeurs sont utilisées pour générer les opérations et pour la légende. Elles peuvent être supérieures à 20. Aucun résultat négatif n'est généré ; les divisions sont exactes.</p>
             </div>
           )}
         </div>
@@ -417,3 +618,4 @@
   </script>
 </body>
 </html>
+
