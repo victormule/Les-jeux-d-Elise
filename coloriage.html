@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <!--
+    Coloriage Magique — Version simple, 100% offline
+    Fichier : index.html (structure propre + accessibilité)
+    Dépendances locales : style.css, app.js
+  -->
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Génère une grille de coloriage magique à partir d'une image : k-means couleurs, opérations mathématiques, export PNG — fonctionne hors-ligne." />
+  <title>Coloriage Magique – Offline</title>
+  <link rel="icon" href="favicon.png" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <noscript>
+    <div style="padding:12px;margin:12px;border:1px solid #e2e8f0;border-radius:8px;background:#fff3cd;color:#663c00">
+      Cette application nécessite JavaScript pour fonctionner.
+    </div>
+  </noscript>
+
+  <!-- En-tête -->
+  <header class="container" role="banner">
+    <a class="back" href="index.html">← Retour aux jeux</a>
+    <h1>Coloriage magique à partir d'une image</h1>
+    <p class="muted">Version sans installation : page statique (HTML + CSS + JS). Tout fonctionne hors-ligne.</p>
+  </header>
+
+  <!-- Contenu principal -->
+  <main class="container grid" role="main">
+    <!-- Colonne gauche : contrôles -->
+    <section class="card" aria-labelledby="controls-title">
+      <h2 id="controls-title" class="visually-hidden">Contrôles</h2>
+
+      <!-- Sélecteur d'image -->
+      <div class="field">
+        <label for="fileInput">Image (PNG, JPEG, WEBP, GIF, BMP)</label>
+        <input id="fileInput" name="fileInput" type="file" accept="image/*" />
+        <small id="fileInfo" class="muted" aria-live="polite"></small>
+      </div>
+
+      <!-- Aperçu brut de l'image chargée -->
+        <div class="preview" aria-live="polite">
+        <h3>Aperçu pixellisé</h3>
+        <canvas id="pixelPreview" aria-label="Aperçu pixellisé"></canvas>
+      </div>
+
+
+      <!-- Réglages principaux -->
+      <div class="field">
+        <label for="cols">Colonnes de la grille : <span id="colsVal">40</span></label>
+        <input id="cols" type="range" min="10" max="120" value="40" />
+      </div>
+
+      <div class="field">
+        <label for="numColors">Nombre de couleurs : <span id="numColorsVal">6</span></label>
+        <input id="numColors" type="range" min="2" max="12" value="6" />
+      </div>
+
+      <div class="field">
+        <label for="opsMode">Type d'opérations</label>
+        <select id="opsMode">
+          <option value="add">Additions</option>
+          <option value="addsub" selected>Additions &amp; soustractions</option>
+          <option value="mult">Multiplications</option>
+          <option value="multdiv">Multiplications &amp; divisions</option>
+          <option value="mix">Mélange (toutes)</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="difficulty">Niveau de difficulté</label>
+        <select id="difficulty">
+          <option value="facile" selected>Facile</option>
+          <option value="moyen">Moyen</option>
+          <option value="difficile">Difficile</option>
+        </select>
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label for="cellPx">Taille des cases (px) : <span id="cellPxVal">36</span></label>
+          <input id="cellPx" type="range" min="16" max="120" value="36" />
+        </div>
+        <label class="checkbox" for="mergeSameColor">
+          <input id="mergeSameColor" type="checkbox" checked /> Fusionner cellules identiques
+        </label>
+      </div>
+
+      <div class="field">
+        <label for="contrast">Contraste : <span id="contrastVal">0</span></label>
+        <input id="contrast" type="range" min="-100" max="100" value="0" />
+      </div>
+
+      <div class="field">
+        <label for="saturation">Saturation : <span id="saturationVal">0</span></label>
+        <input id="saturation" type="range" min="-100" max="100" value="0" />
+      </div>
+
+      <label class="checkbox" for="showOps">
+        <input id="showOps" type="checkbox" checked /> Afficher les calculs dans les cellules
+      </label>
+
+      <div class="actions">
+        <button id="exportPNG" type="button" class="btn">Ouvrir PNG dans un onglet</button>
+      </div>
+
+      <p id="status" class="status" aria-live="polite"></p>
+    </section>
+
+    <!-- Colonne droite : SVG -->
+<section class="card" aria-labelledby="grid-title">
+  <div class="card-head">
+    <h2 id="grid-title">Grille à colorier (SVG)</h2>
+  </div>
+
+  <div class="svgWrap">
+    <div id="svgContainer" class="svgContainer" role="img" aria-label="Grille de coloriage générée"></div>
+  </div>
+
+  <!-- Résultats par couleur juste sous la grille, même bloc -->
+  <div id="resultsInline" class="resultsInline">
+    <h3 class="resultsTitle">Résultats par couleur</h3>
+    <div id="resultsList" class="results"></div>
+    <div class="actions">
+      <button id="resetResults" type="button" class="btn secondary">Réinitialiser</button>
+    </div>
+    <p class="muted small">
+      Ces valeurs servent à générer les opérations et la légende. Elles peuvent dépasser 20.
+      Aucun résultat négatif n'est généré ; les divisions sont exactes.
+    </p>
+  </div>
+</section>
+
+
+    <!-- Éditeur des résultats par couleur -->
+    <section id="resultsCard" class="card" aria-labelledby="results-title" hidden>
+
+    </section>
+  </main>
+
+  <!-- Canvases cachés pour le traitement -->
+  <canvas id="work" class="hidden" aria-hidden="true"></canvas>
+  <canvas id="preview" class="hidden" aria-hidden="true"></canvas>
+
+  <!-- Script applicatif local -->
+  <script src="app.js" type="module" defer></script>
+</body>
+</html>
