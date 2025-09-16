@@ -15,7 +15,7 @@
 const qs = (s, el=document) => el.querySelector(s)
 const clamp = (n, min, max) => Math.max(min, Math.min(max, n))
 const MAX_FONT_SIZE = 14
-const GLUE = '\u00A0' // espace insécable
+const GLUE = '' // espace insécable
 
 const mulberry32 = (a) => () => { let t = (a += 0x6d2b79f5); t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296 }
 
