@@ -1,10 +1,12 @@
 'use strict'
 /*
-  Coloriage Magique — app.js (avec conversions & temps, et "toujours = ?")
-  ✓ Tous les énoncés affichent un "=" suivi de "?"
-  ✓ Conversions : beaucoup de variantes, unités question ≠ unité réponse, décimaux FR autorisés
-  ✓ Temps : variantes en s / min / h / j, sans "× 60" visibles, pas de composante unité = 0
-  ✓ Le reste (aperçu, export PNG, k-means…) inchangé
+  Coloriage Magique — app.js (conversions & temps, suffixe collé, anti-0, multi-lignes)
+  ✓ Aperçu pixelisé net
+  ✓ Grille SVG responsive
+  ✓ Export PNG 1:1
+  ✓ Banques d’énoncés :
+     - add / sub / mult / div (sans "= ?")
+     - unites / temps (toujours "= ? unité", collé, jamais de 0 composant)
 */
 
 /*********************************
@@ -13,6 +15,8 @@
 const qs = (s, el=document) => el.querySelector(s)
 const clamp = (n, min, max) => Math.max(min, Math.min(max, n))
 const MAX_FONT_SIZE = 14
+const GLUE = '\u00A0' // espace insécable
+
 const mulberry32 = (a) => () => { let t = (a += 0x6d2b79f5); t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296 }
 
 /*********************************
@@ -102,7 +106,7 @@ function loadImage(url) {
 }
 
 /*********************************
- * Opérations (génération + layout)
+ * Layout du texte (respect des limites + suffixe collé "= ? unité")
  *********************************/
 function layoutExpression(expr, rw, rh) {
   const pad = Math.floor(0.08 * Math.min(rw, rh))
@@ -110,52 +114,87 @@ function layoutExpression(expr, rw, rh) {
   const availH = Math.max(1, rh - 2*pad)
   const estWidth = (text, fs) => Math.ceil((text.length || 1) * fs * 0.6)
   const lineHeight = (fs) => Math.round(fs * 1.2)
-  const fs0 = Math.min(MAX_FONT_SIZE, Math.max(6, Math.floor(Math.min(availH*0.42, (availW/Math.max(1,expr.length))/0.6))))
-  if (fs0 >= 10 && estWidth(expr, fs0) <= availW) return { mode:'h', lines:[expr], font:fs0, pad }
-  const tokens = expr.split(/\s+/).filter(Boolean)
-  const isOp = (t) => t==='+' || t==='-' || t==='×' || t==='÷' || t==='='
+
+  // Détecte un suffixe "= ? unité" collé avec espaces insécables
+  const m = expr.match(/(.*?)(?:=\u00A0\?\u00A0(\S+))$/)
+  const hasSuffix = !!m
+  const head = hasSuffix ? m[1].trim() : expr
+  const suffixToken = hasSuffix ? `=${GLUE}?${GLUE}${m[2]}` : null
+
+  // Essai 1 : une seule ligne
+  for (let fs=Math.min(MAX_FONT_SIZE, Math.max(6, Math.floor(Math.min(availH*0.42, availW/0.6)))); fs>=6; fs--) {
+    if (!hasSuffix) {
+      if (estWidth(head, fs) <= availW) return { mode:'h', lines:[head], font:fs, pad }
+    } else {
+      const oneLine = `${head} ${suffixToken}`
+      if (estWidth(oneLine, fs) <= availW) return { mode:'h', lines:[oneLine], font:fs, pad }
+    }
+  }
+
+  // Essai 2 : multi-lignes avec tokens (ON NE COUPE PAS les insécables)
+  const tokens = head.split(/[ \t]+/).filter(Boolean) // \u00A0 non coupé
   for (let fs=Math.min(MAX_FONT_SIZE, Math.max(6, Math.floor(availH*0.42))); fs>=6; fs--) {
     const lines=[]; let current=''
     for (let i=0; i<tokens.length; i++) {
       const t=tokens[i]; const cand = current ? current + ' ' + t : t
       if (estWidth(cand, fs) <= availW) current=cand
-      else { if (current) lines.push(current); if (isOp(t)) { lines.push(t); current='' } else { current=t; if (estWidth(current, fs) > availW) { current=''; break } } }
+      else { if (current) lines.push(current); current=t; if (estWidth(current, fs) > availW) { current=''; break } }
     }
     if (current) lines.push(current)
     if (!lines.length) continue
-    const totalH = lines.length * lineHeight(fs)
-    if (totalH <= availH) return { mode:'v', lines, font:fs, pad }
+
+    // Si suffixe présent, on l'ajoute comme DERNIÈRE ligne indivisible
+    let linesWithSuffix = lines
+    if (hasSuffix) {
+      const totalH = (lines.length + 1) * lineHeight(fs)
+      if (totalH <= availH) {
+        linesWithSuffix = [...lines, suffixToken]
+        return { mode:'v', lines: linesWithSuffix, font:fs, pad }
+      }
+    } else {
+      const totalH = lines.length * lineHeight(fs)
+      if (totalH <= availH) return { mode:'v', lines, font:fs, pad }
+    }
   }
+
+  // À défaut : rien (case trop petite)
   return { mode:'none', lines:[], font:0, pad }
 }
 
 /*********************************
- * Banque d’énoncés pour un résultat donné
+ * Banque d’énoncés
  *********************************/
 function exprBankForResult(target, mode, rng, difficulty='facile'){
   if (!mode) return []
   const list=[]
-  const pushUnique = (s) => { if (s && !list.includes(s)) list.push(s) }
 
-  // Format décimal FR (virgule)
-  const fmtFr = (n, maxDec=3) => {
-    const num = Number.isInteger(n) ? String(n) : Number(n.toFixed(maxDec)).toString()
-    const [a,b] = num.split('.')
+  // format décimal FR
+  const fmtFr = (n, maxDec=2) => {
+    const v = Number.isInteger(n) ? String(n) : Number(n.toFixed(maxDec)).toString()
+    const [a,b] = v.split('.')
     return b ? `${a},${b.replace(/0+$/,'')}` : a
   }
 
-  // Fallback "toujours = ?" si une catégorie ne produit rien
-  const fallbackArithmetic = (val) => {
-    if (val >= 2) { const a = Math.floor(val/2); const b = val - a; return `${a} + ${b} = ?` }
-    if (val === 1) return `2 - 1 = ?`
-    return `1 - 1 = ?` // 0
+  // Ajoute une expression en respectant les règles de suffixe / pas de 0
+  const addExpr = (s) => {
+    if (!s) return
+    // bannit " 0 " comme composante d’unité (ex: "0 km", "0 L"…)
+    if (/\b0\s*(km|m|cm|mm|kg|g|L|mL|h|min|s|j)\b/.test(s)) return
+    // pour conversions/temps : coller le suffixe
+    if (mode === 'unites' || mode === 'temps') {
+      s = s.replace(/=\s*\?\s*([^\s]+)/, `=${GLUE}?${GLUE}$1`)
+    } else {
+      // arithmétique : jamais de "= ?"
+      if (/=\s*\?/.test(s)) return
+    }
+    if (!list.includes(s)) list.push(s)
   }
 
-  /********** Modes classiques — désormais toujours avec " = ?" **********/
-  const add2=()=>{ for(let a=0;a<=target;a++){ const b=target-a; if(b>=0) pushUnique(`${a} + ${b} = ?`) } }
-  const sub2=()=>{ for(let a=target;a<=target+40;a++){ const b=a-target; if(b>=0) pushUnique(`${a} - ${b} = ?`) } }
-  const mult2=()=>{ for(let a=1;a<=20;a++){ if(target%a===0){ const b=target/a; if(b>=1&&b<=20) pushUnique(`${a} × ${b} = ?`) } } }
-  const div2 =()=>{ for(let b=1;b<=20;b++){ const a=target*b; if(a<=800) pushUnique(`${a} ÷ ${b} = ?`) } }
+  // ====== MODES ARITHMÉTIQUES (sans "= ?") ======
+  const add2=()=>{ for(let a=0;a<=target;a++){ const b=target-a; if(b>=0) addExpr(`${a} + ${b}`) } }
+  const sub2=()=>{ for(let a=target;a<=target+40;a++){ const b=a-target; if(b>=0) addExpr(`${a} - ${b}`) } }
+  const mult2=()=>{ for(let a=1;a<=20;a++){ if(target%a===0){ const b=target/a; if(b>=1&&b<=20) addExpr(`${a} × ${b}`) } } }
+  const div2 =()=>{ for(let b=1;b<=20;b++){ const a=target*b; if(a<=800) addExpr(`${a} ÷ ${b}`) } }
 
   if (["add","addsub","mix"].includes(mode)) add2()
   if (["addsub","mix"].includes(mode)) sub2()
@@ -165,224 +204,255 @@ function exprBankForResult(target, mode, rng, difficulty='facile'){
   const maxN = difficulty==='facile'?0:(difficulty==='moyen'?12:20)
   if (maxN>0){
     if (["add","addsub","mix"].includes(mode)){
-      for(let a=0;a<=maxN;a++) for(let b=0;b<=maxN;b++){ const c=target-a-b; if(c>=0&&c<=maxN) pushUnique(`${a} + ${b} + ${c} = ?`) }
+      for(let a=0;a<=maxN;a++) for(let b=0;b<=maxN;b++){ const c=target-a-b; if(c>=0&&c<=maxN) addExpr(`${a} + ${b} + ${c}`) }
       if (difficulty==='difficile'){
-        for(let a=0;a<=maxN;a++) for(let b=0;b<=maxN;b++){ const c=a+b-target; if(c>=0&&c<=maxN) pushUnique(`${a} + ${b} - ${c} = ?`) }
+        for(let a=0;a<=maxN;a++) for(let b=0;b<=maxN;b++){ const c=a+b-target; if(c>=0&&c<=maxN) addExpr(`${a} + ${b} - ${c}`) }
       }
     }
     if (["mult","multdiv","mix"].includes(mode)){
       const lim=Math.max(12,Math.min(20,maxN))
-      for(let a=1;a<=lim;a++) for(let b=1;b<=lim;b++){
-        const prod=a*b
-        const cAdd=target-prod; if(cAdd>=0&&cAdd<=maxN) pushUnique(`${a} × ${b} + ${cAdd} = ?`)
-        const cSub=prod-target; if(cSub>=0&&cSub<=maxN) pushUnique(`${a} × ${b} - ${cSub} = ?`)
-      }
+      for(let a=1;a<=lim;a++) for(let b=1;b<=lim;b++){ const prod=a*b; const cAdd=target-prod; if(cAdd>=0&&cAdd<=maxN) addExpr(`${a} × ${b} + ${cAdd}`); const cSub=prod-target; if(cSub>=0&&cSub<=maxN) addExpr(`${a} × ${b} - ${cSub}`) }
     }
     if (difficulty==='difficile' && ["mult","multdiv","mix"].includes(mode)){
-      for(let a=1;a<=12;a++) for(let b=1;b<=12;b++) for(let c=1;c<=12;c++){
-        if(a*b % c === 0 && (a*b)/c === target) pushUnique(`(${a} × ${b}) ÷ ${c} = ?`)
-      }
+      for(let a=1;a<=12;a++) for(let b=1;b<=12;b++) for(let c=1;c<=12;c++){ if(a*b % c === 0 && (a*b)/c === target) addExpr(`(${a} × ${b}) ÷ ${c}`) }
     }
     if (difficulty==='difficile'){
       if (["add","addsub","mix"].includes(mode)){
-        for(let a=0;a<=maxN;a++) for(let b=0;b<=maxN;b++) for(let c=0;c<=maxN;c++){
-          const d=target-a-b-c; if(d>=0&&d<=maxN) pushUnique(`${a} + ${b} + ${c} + ${d} = ?`)
-        }
-        for(let a=0;a<=maxN;a++) for(let b=0;b<=maxN;b++) for(let c=0;c<=maxN;c++){
-          const d=a+b+c-target; if(d>=0&&d<=maxN) pushUnique(`${a} + ${b} + ${c} - ${d} = ?`)
-        }
+        for(let a=0;a<=maxN;a++) for(let b=0;b<=maxN;b++) for(let c=0;c<=maxN;c++){ const d=target-a-b-c; if(d>=0&&d<=maxN) addExpr(`${a} + ${b} + ${c} + ${d}`) }
+        for(let a=0;a<=maxN;a++) for(let b=0;b<=maxN;b++) for(let c=0;c<=maxN;c++){ const d=a+b+c-target; if(d>=0&&d<=maxN) addExpr(`${a} + ${b} + ${c} - ${d}`) }
       }
       if (["mult","multdiv","mix"].includes(mode)){
         const lim=12
         for(let a=1;a<=lim;a++) for(let b=1;b<=lim;b++) for(let c=0;c<=maxN;c++){
           const prod=a*b
-          const dAdd=target-prod-c; if(dAdd>=0&&dAdd<=maxN) pushUnique(`${a} × ${b} + ${c} + ${dAdd} = ?`)
-          const dSub=prod+c-target; if(dSub>=0&&dSub<=maxN) pushUnique(`${a} × ${b} + ${c} - ${dSub} = ?`)
-          const dSub2=prod-c-target; if(dSub2>=0&&dSub2<=maxN) pushUnique(`${a} × ${b} - ${c} - ${dSub2} = ?`)
+          const dAdd=target-prod-c; if(dAdd>=0&&dAdd<=maxN) addExpr(`${a} × ${b} + ${c} + ${dAdd}`)
+          const dSub=prod+c-target; if(dSub>=0&&dSub<=maxN) addExpr(`${a} × ${b} + ${c} - ${dSub}`)
+          const dSub2=prod-c-target; if(dSub2>=0&&dSub2<=maxN) addExpr(`${a} × ${b} - ${c} - ${dSub2}`)
         }
         for(let a=1;a<=lim;a++) for(let b=1;b<=lim;b++) for(let c=1;c<=lim;c++){
           if(a*b % c === 0){
             const base=(a*b)/c
             const d=target-base
-            if(d>=0&&d<=maxN) pushUnique(`(${a} × ${b}) ÷ ${c} + ${d} = ?`)
+            if(d>=0&&d<=maxN) addExpr(`(${a} × ${b}) ÷ ${c} + ${d}`)
           }
         }
       }
     }
   }
 
-  /********** MODE : CONVERSIONS (beaucoup de variantes, décimaux FR, jamais de composante "0") **********/
-  if (mode === 'unites') {
-    // On génère des questions où l’unité demandée (après "= ? ...") est différente
-    // des unités présentes dans l’énoncé. On autorise des décimaux (format FR).
-    // — Longueurs (mm, cm, m, km)
-    pushUnique(`${fmtFr(target/10)} cm = ? mm`)
-    pushUnique(`${fmtFr(target/1000)} m = ? mm`)
-    pushUnique(`${fmtFr(target/100)} m = ? cm`)
-    pushUnique(`${fmtFr(target/100000)} km = ? cm`)
-    pushUnique(`${fmtFr(target/1000)} km = ? m`)
-    pushUnique(`${fmtFr(target*100)} cm = ? m`)
-    // — Masses (g, kg)
-    pushUnique(`${fmtFr(target/1000)} kg = ? g`)
-    // — Volumes (mL, L)
-    pushUnique(`${fmtFr(target/1000)} L = ? mL`)
-
-    // Variantes "multi-unités" non nulles (m + cm -> mm ; km + m -> m ; kg + g -> g ; L + mL -> mL)
-    // Longueurs vers mm
-    if (target >= 70) {
-      const a = Math.max(1, Math.floor(target/1000)) // m
-      const rest = target - 1000*a
-      if (rest > 0) {
-        const b = rest/10 // cm (peut être décimal)
-        if (b > 0) pushUnique(`${a} m ${fmtFr(b)} cm = ? mm`)
+  /************* CONVERSIONS (toujours "= ? unité", pas de composante 0, unités question ≠ unité réponse, décimales possibles) *************/
+  if (mode === 'unites' && target >= 1) {
+    // mm, cm, m, km ; g, kg ; mL, L
+    // Helpers locaux pour pousser des variantes propres
+    // Longueurs -> mm (question sans mm, composants >=1)
+    ;(function toMM(){
+      // a m b cm = ? mm
+      for (let a=1; 1000*a+10<=target; a++){
+        const rest = target - 1000*a
+        if (rest>=10 && rest%10===0){
+          const b = rest/10
+          if (b>=1) addExpr(`${a} m ${b} cm = ? mm`)
+        }
       }
-    }
-    // Longueurs vers m (km + cm)
-    if (target >= 2) {
-      const a = Math.max(1, Math.floor(target/1000))
-      const cm = 100*(target - 1000*a)
-      if (a>=1 && cm>=100) pushUnique(`${a} km ${cm} cm = ? m`)
-    }
-    // Masses vers g (kg + g)
-    if (target > 1000) {
-      const a = Math.floor((target-1)/1000)
-      const b = target - 1000*a
-      if (a>=1 && b>=1) pushUnique(`${a} kg ${b} g = ? g`)
-    }
-    // Volumes vers mL (L + mL)
-    if (target > 1000) {
-      const a = Math.floor((target-1)/1000)
-      const b = target - 1000*a
-      if (a>=1 && b>=1) pushUnique(`${a} L ${b} mL = ? mL`)
-    }
+      // x, y décimaux : x, y > 0
+      // p.ex. 1,2 m = ? mm  (si target multiple de 10)
+      if (target%10===0){
+        const m = target/1000
+        if (m>0) addExpr(`${fmtFr(m,3)} m = ? mm`)
+      }
+      // z, w décimaux en cm : 12,3 cm = ? mm
+      if (target>=1){
+        for (let d=1; d<=9; d++){
+          if ((target - d) > 0 && (target - d)%10===0){
+            const cm = (target - d)/10 + d/10
+            if (cm>0) addExpr(`${fmtFr(cm,1)} cm = ? mm`)
+          }
+        }
+      }
+      // km + m = ? mm (si pas trop long)
+      if (target % 1000 === 0){
+        const m = target / 1000
+        if (m >= 1){
+          const km = Math.max(1, Math.floor(m/2000))
+          const rm = m - 1000*km
+          if (km>=1 && rm>=1) addExpr(`${km} km ${rm} m = ? mm`)
+        }
+      }
+    })();
+
+    // Longueurs -> cm (question sans cm)
+    ;(function toCM(){
+      // a m b mm = ? cm
+      for (let a=1; 100*a+1<=target; a++){
+        const mm = 10*(target - 100*a)
+        if (mm>=10) addExpr(`${a} m ${mm} mm = ? cm`)
+      }
+      // km + m -> ? cm (si target multiple 100)
+      if (target%100===0){
+        const totM = target/100
+        if (totM>=2){
+          const a = Math.max(1, Math.floor(totM/2000))
+          const b = totM - 1000*a
+          if (a>=1 && b>=1) addExpr(`${a} km ${b} m = ? cm`)
+        }
+      }
+      // m décimal -> ? cm
+      if (target%100===0){
+        const m = target/100
+        if (m>0) addExpr(`${fmtFr(m,2)} m = ? cm`)
+      }
+      // mm -> ? cm (autorise décimale en résultat, mais question sans cm)
+      if (target>=1) addExpr(`${target*10} mm = ? cm`)
+    })();
+
+    // Longueurs -> m (question sans m)
+    ;(function toM(){
+      // a km b cm = ? m
+      for (let a=1; 1000*a+0<=target; a++){
+        const cm = 100*(target - 1000*a)
+        if (cm>=100) addExpr(`${a} km ${cm} cm = ? m`)
+      }
+      // cm + mm = ? m
+      for (let mm=10; mm<=990; mm+=10){
+        const cm = target - mm/10
+        if (cm>=1) { addExpr(`${cm} cm ${mm} mm = ? m`); break }
+      }
+      // km décimal -> ? m
+      if (target%1000===0){
+        const km = target/1000
+        if (km>0) addExpr(`${fmtFr(km,3)} km = ? m`)
+      }
+      // mm -> ? m (question sans m)
+      if (target>=1) addExpr(`${target*1000} mm = ? m`)
+    })();
+
+    // Masses -> g (question sans g seul)
+    ;(function massToG(){
+      if (target>1){
+        const a = Math.floor(Math.max(1, (target-1)/1000))
+        const b = target - 1000*a
+        if (a>=1 && b>=1) addExpr(`${a} kg ${b} g = ? g`)
+      }
+      if (target%1000===0){
+        const kg = target/1000
+        if (kg>0) addExpr(`${fmtFr(kg,3)} kg = ? g`)
+      }
+    })();
+
+    // Volumes -> mL (question sans mL seul)
+    ;(function volToML(){
+      if (target>1){
+        const a = Math.floor(Math.max(1, (target-1)/1000))
+        const b = target - 1000*a
+        if (a>=1 && b>=1) addExpr(`${a} L ${b} mL = ? mL`)
+      }
+      if (target%1000===0){
+        const L = target/1000
+        if (L>0) addExpr(`${fmtFr(L,3)} L = ? mL`)
+      }
+    })();
+
+    // Distances -> m (km + m), variante simple
+    ;(function distToM(){
+      if (target>1000){
+        const a = Math.floor((target-1)/1000)
+        const b = target - 1000*a
+        if (a>=1 && b>=1) addExpr(`${a} km ${b} m = ? m`)
+      }
+    })();
   }
 
-  /************* MODE TEMPS (unités question ≠ unité réponse, pas de “× 60”, j/h/min/s, pas de 0) *************/
-  if (mode === 'temps') {
-    // cibles (=target) : valeur numérique attendue dans l’unité demandée
-
-    // Réponse en secondes -> question sans "seconde" seule (au moins 2 unités)
-    // j h min -> ? s
-    {
+  /************* TEMPS (toujours "= ? unité", pas de "×", pas de composante 0 ; unités réponse : s / min / h / j) *************/
+  if (mode === 'temps' && target >= 1) {
+    // Réponse en secondes : j h min -> ? s ; h min -> ? s ; min -> ? s
+    ;(function toSeconds(){
       const S = target
-      // On fabrique j/h/min >=1 et s absents dans l'énoncé
-      // S = 86400*j + 3600*h + 60*m
-      // Cherche j,h,m >=1
       for (let j=1; j<=Math.floor(S/86400); j++) {
-        const remJ = S - 86400*j
-        for (let h=1; h<=Math.floor(remJ/3600); h++) {
-          const remH = remJ - 3600*h
-          if (remH>=60 && remH%60===0) {
-            const m = remH/60
-            if (m>=1) pushUnique(`${j} j ${h} h ${m} min = ? s`)
+        const rJ = S - 86400*j
+        for (let h=1; h<=Math.floor(rJ/3600); h++) {
+          const rH = rJ - 3600*h
+          if (rH>=60 && rH%60===0) {
+            const m = rH/60
+            if (m>=1) addExpr(`${j} j ${h} h ${m} min = ? s`)
           }
         }
       }
-      // variante h + min (sans j) -> ? s
       for (let h=1; h<=Math.floor(S/3600); h++) {
-        const remH = S - 3600*h
-        if (remH>=60 && remH%60===0) {
-          const m = remH/60
-          if (m>=1) pushUnique(`${h} h ${m} min = ? s`)
+        const rH = S - 3600*h
+        if (rH>=60 && rH%60===0) {
+          const m = rH/60
+          if (m>=1) addExpr(`${h} h ${m} min = ? s`)
         }
       }
-      // min seul (sans h) -> ? s (éviter 0)
-      if (S%60===0 && S>=120) {
-        const m = S/60
-        pushUnique(`${m} min = ? s`)
-      }
-    }
+      if (S%60===0 && S>=120) addExpr(`${S/60} min = ? s`)
+    })();
 
-    // Réponse en minutes -> question sans "minute" seule
-    // j h s -> ? min  (on inclut s multiple de 60 pour rester entier)
-    {
+    // Réponse en minutes : j h s -> ? min ; h s -> ? min ; s -> ? min
+    ;(function toMinutes(){
       const M = target
-      // j + h + s
-      for (let j=1; j<=Math.floor(M/1440); j++) {
-        const remJ = M - 1440*j
-        for (let h=1; h<=Math.floor(remJ/60); h++) {
-          const remH = M - 1440*j - 60*h
-          // remH = s/60 -> s multiple de 60 et >= 60
-          if (remH>=1) {
-            const s = remH * 60
-            pushUnique(`${j} j ${h} h ${s} s = ? min`)
+      for (let j=1; j<=Math.floor(M/1440); j++){
+        const rJ = M - 1440*j
+        for (let h=1; h<=Math.floor(rJ/60); h++){
+          const rH = M - 1440*j - 60*h
+          if (rH>=1) {
+            const s = rH * 60
+            addExpr(`${j} j ${h} h ${s} s = ? min`)
           }
         }
       }
-      // h + s -> ? min
-      if (M>=2) {
-        const h = Math.max(1, Math.floor(M/2)) // garde au moins 1 minute pour s
+      if (M>=2){
+        const h = Math.max(1, Math.floor(M/2))
         const rem = M - h
         const s = rem * 60
-        if (h>=1 && rem>=1) pushUnique(`${h} h ${s} s = ? min`)
+        if (h>=1 && rem>=1) addExpr(`${h} h ${s} s = ? min`)
       }
-      // j + h -> ? min
-      if (M>=1500) {
-        const j = 1
-        const h = M/60 - 24
-        if (Number.isInteger(h) && h>=1) pushUnique(`${j} j ${h} h = ? min`)
-      }
-      // s seul -> ? min (si divisible 60 et >= 120 s)
-      if (M>=2) pushUnique(`${M*60} s = ? min`)
-    }
+      addExpr(`${M*60} s = ? min`)
+    })();
 
-    // Réponse en heures -> question sans "heure" seule
-    // j min s -> ? h (on choisit total secondes divisible par 3600)
-    {
+    // Réponse en heures : j min s -> ? h ; min s -> ? h ; j s -> ? h
+    ;(function toHours(){
       const H = target
-      const totalS = H * 3600
-      // j + min (au moins 1 de chaque)
-      for (let j=1; j<=Math.floor(totalS/86400); j++) {
-        const remJ = totalS - 86400*j
-        if (remJ>=60 && remJ%60===0) {
-          const m = remJ/60
-          if (m>=1) pushUnique(`${j} j ${m} min = ? h`)
+      const totalS = H*3600
+      for (let j=1; j<=Math.floor(totalS/86400); j++){
+        const rJ = totalS - 86400*j
+        if (rJ>=60 && rJ%60===0){
+          const m = rJ/60
+          if (m>=1) addExpr(`${j} j ${m} min = ? h`)
         }
       }
-      // min + s -> ? h
-      // 60*min + s = totalS ; min>=1, s in [1..3599]
-      if (totalS>3600) {
+      if (totalS>3600){
         const min = Math.max(1, Math.floor((totalS-1)/60) - 10)
         const s = totalS - 60*min
-        if (min>=1 && between(s,1,3599)) pushUnique(`${min} min ${s} s = ? h`)
+        if (min>=1 && s>=1 && s<3600) addExpr(`${min} min ${s} s = ? h`)
       }
-      // j + s -> ? h (s multiple de 3600 pour rester entier)
-      if (H>=25) {
-        const j = 1
-        const s = (H-24)*3600
-        if (s>=3600) pushUnique(`${j} j ${s} s = ? h`)
+      if (H>=25){
+        const j=1, s=(H-24)*3600
+        if (s>=3600) addExpr(`${j} j ${s} s = ? h`)
       }
-    }
+    })();
 
-    // Réponse en jours -> question sans "jour" seul
-    // h min s -> ? j (total secondes divisible par 86400)
-    {
+    // Réponse en jours : h min s -> ? j ; min s -> ? j ; h s -> ? j
+    ;(function toDays(){
       const J = target
-      const totalS = J * 86400
-      // h + min (au moins 1 de chaque)
-      for (let h=1; h<=Math.floor(totalS/3600)-1; h++) {
-        const remH = totalS - 3600*h
-        if (remH>=60 && remH%60===0) {
-          const m = remH/60
-          if (m>=1) pushUnique(`${h} h ${m} min = ? j`)
+      const totalS = J*86400
+      for (let h=1; h<=Math.floor(totalS/3600)-1; h++){
+        const rH = totalS - 3600*h
+        if (rH>=60 && rH%60===0){
+          const m = rH/60
+          if (m>=1) addExpr(`${h} h ${m} min = ? j`)
         }
       }
-      // min + s -> ? j (s multiple de 60)
-      if (totalS>=60*2) {
+      if (totalS>=120){
         const min = Math.max(1, Math.floor(totalS/120))
         const s = totalS - 60*min
-        if (s>=60) pushUnique(`${min} min ${s} s = ? j`)
+        if (s>=60) addExpr(`${min} min ${s} s = ? j`)
       }
-      // h + s -> ? j (s multiple de 3600)
-      if (J>=1) {
-        const h = 24
-        const s = totalS - 3600*h
-        if (s>=3600) pushUnique(`${h} h ${s} s = ? j`)
-      }
-    }
+      const h=24, s=totalS-3600*h
+      if (s>=3600) addExpr(`${h} h ${s} s = ? j`)
+    })();
   }
 
-  // Mélange de la liste
+  // Mélange
   for (let i=list.length-1;i>0;i--){ const j=Math.floor(rng()*(i+1)); [list[i],list[j]]=[list[j],list[i]] }
   return list
 }
@@ -459,7 +529,10 @@ fileInput?.addEventListener('change', (e) => {
 })
 
 exportPNG?.addEventListener('click', openPNGInNewTab)
-resetResults?.addEventListener('click', () => { state.customResults = state.palette.map((_,i)=> i+2); renderResultsEditor(); redrawSVG() })
+resetResults?.addEventListener('click', () => {
+  state.customResults = state.palette.map((_,i)=> i+2)
+  renderResultsEditor(); redrawSVG()
+})
 
 /*********************************
  * Traitement + aperçu pixellisé
@@ -549,8 +622,17 @@ function renderResultsEditor(){
     const sw = document.createElement('span'); sw.className='swatch'; sw.style.background=`rgb(${c[0]},${c[1]},${c[2]})`
     const name = document.createElement('span'); name.className='muted small'; name.textContent = `Couleur ${i+1}`
     const lab = document.createElement('span'); lab.className='muted small'; lab.textContent = 'Résultat :'
-    const input = document.createElement('input'); input.type='number'; input.min='0'; input.max='9999'; input.value = state.customResults[i] ?? (i+2)
-    input.addEventListener('input', ()=>{ const n=Number(input.value); state.customResults[i] = Number.isFinite(n) ? clamp(Math.round(n),0,9999) : (state.customResults[i] ?? i+2); redrawSVG() })
+    const input = document.createElement('input'); input.type='number'; input.min='1'; input.max='9999'
+    const wanted = state.customResults[i] ?? (i+2)
+    input.value = Math.max(1, Math.floor(wanted))
+    input.addEventListener('input', ()=>{
+      let n = Number(input.value)
+      if (!Number.isFinite(n)) n = 1
+      n = clamp(Math.round(n), 1, 9999) // pas de 0
+      state.customResults[i] = n
+      input.value = n
+      redrawSVG()
+    })
     row.append(sw, name, lab, input); resultsList.append(row)
   })
 }
@@ -569,9 +651,25 @@ function redrawSVG(){
   const Hpx = H * cell
 
   const rng = mulberry32(state.seed)
-  const numberColorMap = palette.map((color,i)=> ({ value: Math.max(0, Math.floor(state.customResults[i] ?? (i+2))), color }))
+  const numberColorMap = palette.map((color,i)=> ({ value: Math.max(1, Math.floor(state.customResults[i] ?? (i+2))), color })) // mini 1
   const exprBank = {}
-  if (state.showOps) for (const e of numberColorMap) exprBank[e.value] = exprBankForResult(e.value, state.opsMode, rng, state.difficulty)
+  if (state.showOps) {
+    for (const e of numberColorMap) {
+      const arr = exprBankForResult(e.value, state.opsMode, rng, state.difficulty)
+      // filet de sécurité : toujours au moins une question pour conversions/temps
+      if ((!arr || !arr.length) && (state.opsMode==='unites' || state.opsMode==='temps')) {
+        // fallback simple cohérent
+        if (state.opsMode==='unites') {
+          if (e.value%10===0) exprBank[e.value] = [`${e.value/10} cm = ? mm`]
+          else exprBank[e.value] = [`${e.value} mm = ? cm`]
+        } else { // temps
+          exprBank[e.value] = [`${e.value} min = ? s`]
+        }
+      } else {
+        exprBank[e.value] = arr
+      }
+    }
+  }
 
   const rects = state.mergeSameColor ? mergeRectangles(labels, W, H) : labels.map((k,i)=>({ x:i%W, y:Math.floor(i/W), w:1, h:1, k }))
 
@@ -583,8 +681,13 @@ function redrawSVG(){
     const cx=r.x*cell, cy=r.y*cell, rw=r.w*cell, rh=r.h*cell
     s += `<rect x='${cx}' y='${cy}' width='${rw}' height='${rh}' fill='none' stroke='black' stroke-width='1' shape-rendering='crispEdges'/>`
     if (state.showOps){
-      const val = numberColorMap[r.k]?.value ?? 0
-      const exprs = exprBank[val] || [String(val)]
+      const val = numberColorMap[r.k]?.value ?? 1
+      let exprs = exprBank[val] || []
+      if (!exprs.length) {
+        // pour l'arithmétique, dernière roue si jamais vide (rare) sans "= ?"
+        if (state.opsMode==='unites' || state.opsMode==='temps') exprs = [`=${GLUE}?`]
+        else exprs = [`${Math.max(0, val-1)} + 1`]
+      }
       const expr = exprs[(r.x + r.y + r.k) % exprs.length]
       const L = layoutExpression(expr, rw, rh)
       if (L.mode==='h'){
@@ -638,6 +741,5 @@ function openPNGInNewTab(){
 /*********************************
  * Bootstrap
  *********************************/
-
 renderStatus()
 redrawSVG()
