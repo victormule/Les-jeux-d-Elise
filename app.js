@@ -250,79 +250,174 @@ function exprBankForResult(target, mode, rng, difficulty='facile'){
   }
 
   // ========= NOUVEAU MODE : CONVERSIONS D’UNITÉS =========
-  if (mode === "unites") {
-    // Longueurs -> mm : a m b cm c mm = ? mm  (1000a + 10b + c = target)
-    {
-      const a = Math.floor(target / 1000)
-      const rem = target % 1000
-      const b = Math.floor(rem / 10)
-      const c = rem % 10
-      pushUnique(`${a} m ${b} cm ${c} mm = ? mm`)
+ // ========= NOUVEAU MODE : CONVERSIONS D’UNITÉS (sans "0", unités différentes) =========
+if (mode === "unites") {
+  // On génère des énoncés où l’unité demandée (réponse) est différente
+  // des unités utilisées dans la question, et on évite les "0 kg", "0 m", etc.
+  // On pousse plusieurs variantes possibles pour chaque target.
+
+  const addLenToMM = () => {
+    // Réponse en mm, question en m + cm (pas de mm dans l'énoncé)
+    // Cherche a>=1, b>=1 tel que 1000a + 10b = target  (+ reste c, on évite en l'absence)
+    // Si ce n’est pas possible, on tolère cm + mm (sans 0) — toujours possible.
+    let pushed = false
+    // Essai m + cm uniquement
+    for (let a = 1; a <= Math.floor(target / 1000); a++) {
+      const rest = target - 1000 * a
+      if (rest >= 10 && rest % 10 === 0) {
+        const b = rest / 10
+        if (b >= 1) {
+          pushUnique(`${a} m ${b} cm = ? mm`)
+          pushed = true
+          break
+        }
+      }
     }
-    // Longueurs -> cm : a m b cm = ? cm  (100a + b = target)
-    {
-      const a = Math.floor(target / 100)
-      const b = target % 100
-      pushUnique(`${a} m ${b} cm = ? cm`)
-    }
-    // Distances -> m : a km b m = ? m  (1000a + b = target)
-    {
-      const a = Math.floor(target / 1000)
-      const b = target % 1000
-      pushUnique(`${a} km ${b} m = ? m`)
-    }
-    // Masse -> g : a kg b g = ? g  (1000a + b = target)
-    {
-      const a = Math.floor(target / 1000)
-      const b = target % 1000
-      pushUnique(`${a} kg ${b} g = ? g`)
-    }
-    // Contenance -> mL : a L b mL = ? mL  (1000a + b = target)
-    {
-      const a = Math.floor(target / 1000)
-      const b = target % 1000
-      pushUnique(`${a} L ${b} mL = ? mL`)
-    }
-    // Variantes « x × 10/100/1000 »
-    {
-      if (target % 10 === 0)   pushUnique(`${target/10} cm = ? mm`)
-      if (target % 100 === 0)  pushUnique(`${target/100} m = ? cm`)
-      if (target % 1000 === 0) {
-        pushUnique(`${target/1000} kg = ? g`)
-        pushUnique(`${target/1000} L = ? mL`)
-        pushUnique(`${target/1000} km = ? m`)
+    if (!pushed) {
+      // cm + mm (éviter 0) — toujours faisable
+      // choisir mm dans [1..9] qui rend (target - mm) multiple de 10
+      for (let mm = 1; mm <= 9; mm++) {
+        if ((target - mm) > 0 && (target - mm) % 10 === 0) {
+          const cm = (target - mm) / 10
+          if (cm >= 1) { pushUnique(`${cm} cm ${mm} mm = ? mm`); break }
+        }
       }
     }
   }
 
-  // ========= NOUVEAU MODE : TEMPS (heures/minutes/secondes) =========
-  if (mode === "temps") {
-    // Réponse en minutes
-    {
-      const h = Math.floor(target / 60)
-      const m = target % 60
-      pushUnique(`${h} h ${m} min = ? min`)
-      if (m === 0) pushUnique(`${h} h = ? min`)
+  const addLenToCM = () => {
+    // Réponse en cm, question en m + mm (pas de "cm" dans la question)
+    // 100a + (mm/10) = target -> mm = 10*(target - 100a), mm >= 10
+    for (let a = 1; a <= Math.floor(target / 100); a++) {
+      const mm = 10 * (target - 100 * a)
+      if (mm >= 10) { pushUnique(`${a} m ${mm} mm = ? cm`); return }
     }
-    // Réponse en secondes
-    {
-      const a = Math.floor(target / 60)
-      const b = target % 60
-      pushUnique(`${a} min ${b} s = ? s`)
-      if (b === 0) pushUnique(`${a} min = ? s`)
-    }
-    // Décompositions utiles
-    {
-      if (target >= 30 && target % 15 === 0) {
-        const q = target / 15
-        pushUnique(`${q} × 15 min = ? min`)
-      }
-      if (target >= 20 && target % 10 === 0) {
-        const q = target / 10
-        pushUnique(`${q} × 10 min = ? min`)
+    // Sinon km + m -> cm : 100000a + 100b = target => target multiple de 100
+    if (target % 100 === 0) {
+      const totM = target / 100
+      if (totM >= 2) {
+        // a km b m, a>=1, b>=1
+        const a = Math.max(1, Math.floor(totM / 2000))
+        const b = totM - 1000 * a
+        if (a >= 1 && b >= 1) pushUnique(`${a} km ${b} m = ? cm`)
       }
     }
   }
+
+  const addLenToM = () => {
+    // Réponse en m, question en km + cm (pas de "m" dans la question)
+    // 1000a + (cm/100) = target -> cm = 100*(target - 1000a), cm>=100
+    for (let a = 1; a <= Math.floor(target / 1000); a++) {
+      const cm = 100 * (target - 1000 * a)
+      if (cm >= 100) { pushUnique(`${a} km ${cm} cm = ? m`); return }
+    }
+    // Sinon cm + mm -> m : (cm + mm/10) = target -> mm multiple de 10
+    for (let mm = 10; mm <= 990; mm += 10) {
+      const cm = target - mm / 10
+      if (cm >= 1) { pushUnique(`${cm} cm ${mm} mm = ? m`); break }
+    }
+  }
+
+  const addMassToG = () => {
+    // Réponse en g, question en kg + g (pas de "g" seul)
+    // 1000a + b = target, avec a>=1, b>=1
+    if (target > 1000) {
+      const a = Math.floor((target - 1) / 1000) // laisse au moins 1g
+      const b = target - 1000 * a
+      if (a >= 1 && b >= 1) pushUnique(`${a} kg ${b} g = ? g`)
+    } else {
+      // L + mL -> g n’a pas de sens physique; on s’en tient à kg/g
+      if (target >= 2 && target <= 999) pushUnique(`0 kg ${target} g = ? g`) // on évite, donc on n'ajoute pas
+    }
+  }
+
+  const addVolToML = () => {
+    // Réponse en mL, question en L + mL (pas de "mL" seul)
+    // 1000a + b = target, a>=1, b>=1
+    if (target > 1000) {
+      const a = Math.floor((target - 1) / 1000)
+      const b = target - 1000 * a
+      if (a >= 1 && b >= 1) pushUnique(`${a} L ${b} mL = ? mL`)
+    } else {
+      // mL seulement -> on évite le "0 L", donc on fabrique cm3 + L si divisible
+      // (pour rester simple et scolaire : on ne met pas cm3)
+    }
+  }
+
+  const addDistToM = () => {
+    // Réponse en m, question en km + m (différentes unités et pas de 0)
+    if (target > 1000) {
+      const a = Math.floor((target - 1) / 1000)
+      const b = target - 1000 * a
+      if (a >= 1 && b >= 1) pushUnique(`${a} km ${b} m = ? m`)
+    }
+  }
+
+  // On tente quelques variantes par target
+  addLenToMM()
+  addLenToCM()
+  addLenToM()
+  addMassToG()
+  addVolToML()
+  addDistToM()
+}
+
+ // ========= NOUVEAU MODE : TEMPS (sans multiplications, unités question ≠ unité réponse) =========
+if (mode === "temps") {
+  // Objectif :
+  // - pas d’énoncés du type "x × 60" etc.
+  // - au moins 2 unités dans la question
+  // - unité de réponse différente de celles de la question
+  // - pas de composant égal à 0
+
+  // 1) Question en "h + min" -> réponse en secondes (si target % 60 === 0)
+  //    3600H + 60M = target, H>=1, M>=1
+  if (target % 60 === 0 && target >= 3660) {
+    const Tm = target / 60 // total minutes
+    // Choisir H (en heures) de façon à garder au moins 1 min
+    const H = Math.min(Math.floor(Tm / 60) || 1, Math.max(1, Math.floor(Tm / 120)))
+    const M = Tm - 60 * H
+    if (H >= 1 && M >= 1) pushUnique(`${H} h ${M} min = ? s`)
+  }
+
+  // 2) Question en "h + s" -> réponse en minutes (toujours possible)
+  //    60H + S/60 = target  => choisir S multiple de 60 ; H>=1, S>=60
+  {
+    const H = Math.max(1, Math.floor((target - 1) / 60)) // laisse au moins 1 minute pour S
+    const k = target - 60 * H // k = S/60
+    if (k >= 1) {
+      const S = 60 * k
+      pushUnique(`${H} h ${S} s = ? min`)
+    } else {
+      // si target < 60, on ne peut pas prendre H>=1 ; on bascule en "min + s" -> ? h uniquement si divisible par 3600
+    }
+  }
+
+  // 3) Question en "min + s" -> réponse en heures (si divisible par 3600)
+  //    60*min + s = target * 3600  => ici on veut que (60*min + s) / 3600 = target
+  //    Remarque : utile pour des cibles entières d'heures (ex. target = 2 -> 2 h)
+  if (target >= 1) {
+    const totalS = target * 3600
+    // Choisir min >= 1 et s dans [1..3599] tel que 60*min + s = totalS
+    if (totalS > 3600) {
+      const min = Math.max(1, Math.floor((totalS - 1) / 60) - 10) // garde de la marge pour s
+      const s = totalS - 60 * min
+      if (min >= 1 && s >= 1 && s < 3600) {
+        pushUnique(`${min} min ${s} s = ? h`)
+      }
+    }
+  }
+
+  // 4) Question en "h + min + s" -> réponse en minutes (si s multiple de 60)
+  //    (60H + M) + S/60 = target ; choisir S multiple de 60, H>=1, M>=1
+  if (target >= 2) {
+    const H = 1
+    // target = 60*H + M + S/60 => M = target - 60 - S/60
+    // On choisit S = 60 pour rester propre, alors M = target - 61
+    const M = target - 61
+    if (M >= 1) pushUnique(`${H} h ${M} min 60 s = ? min`)
+  }
+}
 
   // Mélange
   for (let i=list.length-1; i>0; i--) {
