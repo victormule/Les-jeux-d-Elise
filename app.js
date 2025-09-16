@@ -1,12 +1,13 @@
 'use strict'
 /*
-  Coloriage Magique — app.js (conversions & temps, suffixe collé, anti-0, multi-lignes)
-  ✓ Aperçu pixelisé net
-  ✓ Grille SVG responsive
-  ✓ Export PNG 1:1
-  ✓ Banques d’énoncés :
-     - add / sub / mult / div (sans "= ?")
-     - unites / temps (toujours "= ? unité", collé, jamais de 0 composant)
+  Coloriage Magique — app.js
+  ✓ Police min 11 + wrap forcé (mots puis caractères)
+  ✓ Conversions : sliders % ? m / ? L / ? g (équilibrage pondéré)
+  ✓ Temps : équilibre ? s / ? min / ? h / ? j
+  ✓ Conversions/Temps : toujours "= ? unité" (espaces sécables)
+  ✓ Aucune composante = 0 dans Conversions/Temps
+  ✓ Arithmétique : jamais "= ?"
+  ✓ Reste identique (aperçu pixelisé, export PNG, fusion cellules…)
 */
 
 /*********************************
@@ -15,9 +16,15 @@
 const qs = (s, el=document) => el.querySelector(s)
 const clamp = (n, min, max) => Math.max(min, Math.min(max, n))
 const MAX_FONT_SIZE = 14
-const GLUE = '' // espace insécable
+const MIN_FONT_SIZE = 11    // *** nouvelle contrainte ***
+const GLUE = ' '            // espaces sécables autour de "= ? unité"
 
-const mulberry32 = (a) => () => { let t = (a += 0x6d2b79f5); t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296 }
+const mulberry32 = (a) => () => {
+  let t = (a += 0x6d2b79f5)
+  t = Math.imul(t ^ (t >>> 15), t | 1)
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+}
 
 /*********************************
  * K-means simple (RGB)
@@ -28,19 +35,31 @@ function kmeans(points, k, maxIter = 24, seedVal = 1) {
   const rand = mulberry32(seedVal)
   const centers = []
   const used = new Set()
-  while (centers.length < k) { const idx = Math.floor(rand() * points.length); if (!used.has(idx)) { used.add(idx); centers.push(points[idx].slice()) } }
+  while (centers.length < k) {
+    const idx = Math.floor(rand() * points.length)
+    if (!used.has(idx)) { used.add(idx); centers.push(points[idx].slice()) }
+  }
   const labels = new Array(points.length).fill(0)
   const dist2 = (a, b) => (a[0]-b[0])**2 + (a[1]-b[1])**2 + (a[2]-b[2])**2
   for (let it=0; it<maxIter; it++) {
     let changed = false
     for (let i=0; i<points.length; i++) {
       let best=0, bestd=Infinity
-      for (let c=0; c<centers.length; c++) { const d2 = dist2(points[i], centers[c]); if (d2 < bestd) { bestd=d2; best=c } }
+      for (let c=0; c<centers.length; c++) {
+        const d2 = dist2(points[i], centers[c])
+        if (d2 < bestd) { bestd=d2; best=c }
+      }
       if (labels[i] !== best) { labels[i]=best; changed=true }
     }
     const sums = Array.from({length:k}, () => [0,0,0,0])
-    for (let i=0; i<points.length; i++) { const c=labels[i], p=points[i]; sums[c][0]+=p[0]; sums[c][1]+=p[1]; sums[c][2]+=p[2]; sums[c][3]++ }
-    for (let c=0; c<k; c++) if (sums[c][3]>0) centers[c] = [ sums[c][0]/sums[c][3], sums[c][1]/sums[c][3], sums[c][2]/sums[c][3] ]
+    for (let i=0; i<points.length; i++) {
+      const c=labels[i], p=points[i]
+      sums[c][0]+=p[0]; sums[c][1]+=p[1]; sums[c][2]+=p[2]; sums[c][3]++
+    }
+    for (let c=0; c<k; c++)
+      if (sums[c][3]>0) centers[c] = [
+        sums[c][0]/sums[c][3], sums[c][1]/sums[c][3], sums[c][2]/sums[c][3]
+      ]
     if (!changed) break
   }
   return { centers, labels }
@@ -60,10 +79,13 @@ function mergeRectangles(labels, W, H) {
     let w=1; while (x+w<W && !visited[y*W+(x+w)] && at(x+w,y)===k) w++
     let h=1, ok=true
     while (y+h<H && ok) {
-      for (let xx=0; xx<w; xx++) if (visited[(y+h)*W + (x+xx)] || at(x+xx, y+h)!==k) { ok=false; break }
+      for (let xx=0; xx<w; xx++)
+        if (visited[(y+h)*W + (x+xx)] || at(x+xx, y+h)!==k) { ok=false; break }
       if (ok) h++
     }
-    for (let yy=0; yy<h; yy++) for (let xx=0; xx<w; xx++) visited[(y+yy)*W + (x+xx)] = 1
+    for (let yy=0; yy<h; yy++)
+      for (let xx=0; xx<w; xx++)
+        visited[(y+yy)*W + (x+xx)] = 1
     rects.push({ x, y, w, h, k })
   }
   return rects
@@ -97,8 +119,15 @@ function loadImage(url) {
   return new Promise((resolve, reject) => {
     const img = new Image(); img.decoding = 'async'
     img.onload = async () => {
-      try { if (typeof img.decode === 'function') await img.decode(); if ((img.naturalWidth||img.width)===0) return reject(new Error('Image sans dimensions.')); resolve(img) }
-      catch(e) { if ((img.naturalWidth||img.width)>0) resolve(img); else reject(new Error("Échec du décodage de l'image.")) }
+      try {
+        if (typeof img.decode === 'function') await img.decode()
+        if ((img.naturalWidth||img.width)===0)
+          return reject(new Error('Image sans dimensions.'))
+        resolve(img)
+      } catch(e) {
+        if ((img.naturalWidth||img.width)>0) resolve(img)
+        else reject(new Error("Échec du décodage de l'image."))
+      }
     }
     img.onerror = () => reject(new Error("Impossible de charger l'image (fichier illisible)."))
     img.src = url
@@ -106,7 +135,7 @@ function loadImage(url) {
 }
 
 /*********************************
- * Layout du texte (respect des limites + suffixe collé "= ? unité")
+ * Layout du texte (min 11, wrap forcé)
  *********************************/
 function layoutExpression(expr, rw, rh) {
   const pad = Math.floor(0.08 * Math.min(rw, rh))
@@ -115,50 +144,89 @@ function layoutExpression(expr, rw, rh) {
   const estWidth = (text, fs) => Math.ceil((text.length || 1) * fs * 0.6)
   const lineHeight = (fs) => Math.round(fs * 1.2)
 
-  // Détecte un suffixe "= ? unité" collé avec espaces insécables
-  const m = expr.match(/(.*?)(?:=\u00A0\?\u00A0(\S+))$/)
+  // Détecter un suffixe "= ? unité" (espaces sécables)
+  const m = expr.match(/(.*?)(?:=\s*\?\s*(\S+))$/)
   const hasSuffix = !!m
   const head = hasSuffix ? m[1].trim() : expr
   const suffixToken = hasSuffix ? `=${GLUE}?${GLUE}${m[2]}` : null
 
-  // Essai 1 : une seule ligne
-  for (let fs=Math.min(MAX_FONT_SIZE, Math.max(6, Math.floor(Math.min(availH*0.42, availW/0.6)))); fs>=6; fs--) {
-    if (!hasSuffix) {
-      if (estWidth(head, fs) <= availW) return { mode:'h', lines:[head], font:fs, pad }
-    } else {
-      const oneLine = `${head} ${suffixToken}`
-      if (estWidth(oneLine, fs) <= availW) return { mode:'h', lines:[oneLine], font:fs, pad }
-    }
+  // 1) Essai 1 ligne (jamais < 11)
+  for (let fs=Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, Math.floor(Math.min(availH*0.42, availW/0.6)))); fs>=MIN_FONT_SIZE; fs--) {
+    const one = hasSuffix ? `${head} ${suffixToken}` : head
+    if (estWidth(one, fs) <= availW) return { mode:'h', lines:[one], font:fs, pad }
   }
 
-  // Essai 2 : multi-lignes avec tokens (ON NE COUPE PAS les insécables)
-  const tokens = head.split(/[ \t]+/).filter(Boolean) // \u00A0 non coupé
-  for (let fs=Math.min(MAX_FONT_SIZE, Math.max(6, Math.floor(availH*0.42))); fs>=6; fs--) {
+  // 2) Multi-lignes par mots (jamais < 11)
+  const tokens = head.split(/[ \t]+/).filter(Boolean)
+  for (let fs=Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, Math.floor(availH*0.42))); fs>=MIN_FONT_SIZE; fs--) {
     const lines=[]; let current=''
+    const fits = (txt) => estWidth(txt, fs) <= availW
     for (let i=0; i<tokens.length; i++) {
       const t=tokens[i]; const cand = current ? current + ' ' + t : t
-      if (estWidth(cand, fs) <= availW) current=cand
-      else { if (current) lines.push(current); current=t; if (estWidth(current, fs) > availW) { current=''; break } }
+      if (fits(cand)) current=cand
+      else { if (current) lines.push(current); if (!fits(t)) { lines.length=0; current=''; break } current=t }
     }
     if (current) lines.push(current)
     if (!lines.length) continue
 
-    // Si suffixe présent, on l'ajoute comme DERNIÈRE ligne indivisible
     let linesWithSuffix = lines
+    const totalHBase = lines.length * lineHeight(fs)
     if (hasSuffix) {
       const totalH = (lines.length + 1) * lineHeight(fs)
       if (totalH <= availH) {
         linesWithSuffix = [...lines, suffixToken]
         return { mode:'v', lines: linesWithSuffix, font:fs, pad }
       }
-    } else {
-      const totalH = lines.length * lineHeight(fs)
-      if (totalH <= availH) return { mode:'v', lines, font:fs, pad }
+    } else if (totalHBase <= availH) {
+      return { mode:'v', lines, font:fs, pad }
     }
   }
 
-  // À défaut : rien (case trop petite)
-  return { mode:'none', lines:[], font:0, pad }
+  // 3) Dernier recours : wrap caractère par caractère à 11 (pour éviter tout débordement)
+  const fs = MIN_FONT_SIZE
+  const lh = lineHeight(fs)
+  const maxLines = Math.max(1, Math.floor(availH / lh))
+  const text = head
+  const hardLines = []
+  let cur = ''
+  for (let i=0; i<text.length; i++) {
+    const cand = cur + text[i]
+    if (estWidth(cand, fs) <= availW) cur = cand
+    else { hardLines.push(cur); cur = text[i]; if (hardLines.length >= maxLines-1) break }
+  }
+  if (cur && hardLines.length < maxLines) hardLines.push(cur)
+  const finalLines = [...hardLines]
+  if (hasSuffix && finalLines.length < maxLines) finalLines.push(suffixToken)
+  return { mode:'v', lines: finalLines, font:fs, pad }
+}
+
+/*********************************
+ * Répartition pondérée
+ *********************************/
+function weightedInterleave(buckets, weights) {
+  // weights: tableau positif, normalisé en interne
+  const B = buckets.map(b => b.slice()) // copies
+  const w = weights.slice()
+  const totalW = w.reduce((a,b)=>a+b,0) || 1
+  for (let i=0;i<w.length;i++) w[i] = w[i]/totalW
+
+  const used = new Array(B.length).fill(0)
+  const out = []
+
+  // Tant qu’il reste des éléments
+  while (B.some(b => b.length)) {
+    // Choisir le bucket i qui minimise used[i]/w[i] (progression relative)
+    let best = -1, bestScore = Infinity
+    for (let i=0;i<B.length;i++) {
+      if (!B[i].length) continue
+      const score = used[i] / (w[i] || 1e-9)
+      if (score < bestScore) { bestScore = score; best = i }
+    }
+    if (best === -1) break
+    out.push(B[best].shift())
+    used[best]++
+  }
+  return out
 }
 
 /*********************************
@@ -184,18 +252,6 @@ function exprBankForResult(targetRaw, mode, rng, difficulty='facile'){
     if (!list.includes(s)) list.push(s)
   }
   const shuffleInPlace = (arr) => { for (let i=arr.length-1;i>0;i--){ const j=Math.floor(rng()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]] } }
-  const interleaveBalanced = (buckets) => {
-    // mélange interne, puis round-robin pour préserver la proportion
-    buckets.forEach(b => shuffleInPlace(b))
-    const out=[]; let i=0
-    while (true) {
-      let pushed=false
-      for (const b of buckets) { if (i < b.length) { out.push(b[i]); pushed=true } }
-      if (!pushed) break
-      i++
-    }
-    return out
-  }
 
   /************* ARITHMÉTIQUE (inchangé, sans "= ?") *************/
   const target = targetRaw
@@ -248,69 +304,63 @@ function exprBankForResult(targetRaw, mode, rng, difficulty='facile'){
     }
   }
 
-  /************* CONVERSIONS — équilibre m / L / g *************/
+  /************* CONVERSIONS — équilibre pondéré ? m / ? L / ? g *************/
   if (mode === 'unites') {
-    const Tm = Number(targetRaw)        // résultat en mètres
-    const TL = Number(targetRaw)        // résultat en litres
-    const Tg = Math.round(Number(targetRaw)) // résultat en grammes (on reste sur un entier propre)
+    const Tm = Number(targetRaw)         // résultat en mètres (peut être décimal)
+    const TL = Number(targetRaw)         // résultat en litres (peut être décimal)
+    const Tg = Math.round(Number(targetRaw)) // résultat en grammes (on force entier propre pour g)
 
     const Qm = []  // -> ? m
     const QL = []  // -> ? L
     const Qg = []  // -> ? g
 
-    // === mètre : question sans "m"
-    // cm + mm = ? m (beaucoup de variantes)
+    // === -> ? m (question sans "m")
     for (let mm=10; mm<=990; mm+=10){
       const cm = Math.round(Tm*100 - mm/10)
       if (cm>=1) Qm.push(`${cm} cm ${mm} mm = ? m`)
-      if (Qm.length>=16) break
+      if (Qm.length>=18) break
     }
-    // mm seul (variante simple)
     if (Tm>0) Qm.push(`${Math.round(Tm*1000)} mm = ? m`)
-    // km décimal
-    if (Tm>0) Qm.push(`${fmtFr(Tm/1000,3)} km = ? m`)
+    if (Tm>0) Qm.push(`${(Tm/1000).toString().replace('.',',')} km = ? m`)
 
-    // === litre : question sans "L"
-    // mL seul
+    // === -> ? L (question sans "L")
     if (TL>0) {
       QL.push(`${Math.round(TL*1000)} mL = ? L`)
-      // mL + mL (deux contenants)
       const a = Math.max(1, Math.floor(TL*1000/2))
       const b = Math.round(TL*1000 - a)
       if (a>=1 && b>=1) QL.push(`${a} mL ${b} mL = ? L`)
+      if (!Number.isInteger(TL)) QL.push(`${TL.toString().replace('.',',')} L = ? mL`) // variante inverse (réponse mL) – on reste sur ? L ici, donc on évite cette ligne; laissée en réserve
     }
 
-    // === gramme : question sans "g"
-    // kg décimal
-    if (Tg>0) Qg.push(`${fmtFr(Tg/1000,3)} kg = ? g`)
-    // kg entier + kg décimal… (sans afficher "g")
-    if (Tg>=1000) {
-      const kgInt = Math.floor(Tg/1000)
-      const kgDec = (Tg/1000) - kgInt
-      if (kgDec>0) Qg.push(`${fmtFr(kgInt+kgDec,3)} kg = ? g`)
-      if (kgInt>=1 && Tg-kgInt*1000>=1) Qg.push(`${kgInt+kgDec===kgInt?kgInt:fmtFr(kgInt+kgDec,3)} kg = ? g`)
+    // === -> ? g (question sans "g")
+    if (Tg>0) {
+      Qg.push(`${(Tg/1000).toString().replace('.',',')} kg = ? g`)
+      if (Tg>=1000) {
+        const kgInt = Math.floor(Tg/1000)
+        const kgDec = (Tg/1000) - kgInt
+        if (kgDec>0) Qg.push(`${(kgInt+kgDec).toString().replace('.',',')} kg = ? g`)
+      }
     }
 
-    // Équilibrage (= interleave)
-    const balanced = interleaveBalanced([Qm, QL, Qg])
-    list.length = 0
-    balanced.forEach(s => addExpr(s))
-    return list
+    // Pondération depuis l'état (sliders)
+    const mix = (typeof state !== 'undefined' && state.unitesMix)
+      ? state.unitesMix
+      : { m: 33, L: 34, g: 33 }
+    const weights = [Math.max(0, mix.m), Math.max(0, mix.L), Math.max(0, mix.g)]
+    const balanced = weightedInterleave([Qm, QL, Qg], weights)
+    return balanced.filter(Boolean)
   }
 
   /************* TEMPS — équilibre ? s / ? min / ? h / ? j *************/
   if (mode === 'temps') {
     const qs=[] , qmin=[] , qh=[] , qj=[]
 
-    // --- ? s : question en h/min (ou j/h/min), sans "s"
+    // ? s
     {
       const S = Math.round(Number(targetRaw))
       for (let h=1; h<=Math.floor(S/3600); h++){
         const rem = S - 3600*h
-        if (rem>=60 && rem%60===0){
-          const m = rem/60
-          if (m>=1) qs.push(`${h} h ${m} min = ? s`)
-        }
+        if (rem>=60 && rem%60===0){ const m = rem/60; if (m>=1) qs.push(`${h} h ${m} min = ? s`) }
         if (qs.length>=10) break
       }
       for (let j=1; j<=Math.floor(S/86400); j++){
@@ -324,7 +374,7 @@ function exprBankForResult(targetRaw, mode, rng, difficulty='facile'){
       if (S%60===0 && S>=120) qs.push(`${S/60} min = ? s`)
     }
 
-    // --- ? min : question en h/s (ou j/h/s), sans "min"
+    // ? min
     {
       const M = Math.round(Number(targetRaw))
       for (let h=1; h<=Math.floor(M/2); h++){
@@ -343,7 +393,7 @@ function exprBankForResult(targetRaw, mode, rng, difficulty='facile'){
       qmin.push(`${M*60} s = ? min`)
     }
 
-    // --- ? h : question en min/s (ou j/min), sans "h"
+    // ? h
     {
       const H = Math.round(Number(targetRaw))
       const totS = H*3600
@@ -359,7 +409,7 @@ function exprBankForResult(targetRaw, mode, rng, difficulty='facile'){
       }
     }
 
-    // --- ? j : question en h/min/s, sans "j"
+    // ? j
     {
       const J = Math.round(Number(targetRaw))
       const totS = J*86400
@@ -374,19 +424,15 @@ function exprBankForResult(targetRaw, mode, rng, difficulty='facile'){
       }
     }
 
-    // Équilibrage (= interleave 4 seaux)
-    const balanced = interleaveBalanced([qs, qmin, qh, qj])
-    list.length = 0
-    balanced.forEach(s => addExpr(s))
-    return list
+    // Répartition équilibrée simple (1:1:1:1)
+    const all = weightedInterleave([qs, qmin, qh, qj], [1,1,1,1])
+    return all.filter(Boolean)
   }
 
-  // Par défaut (arithmétique) : on mélange pour la variété
+  // Arithmétique : mélange pour variété
   shuffleInPlace(list)
   return list
 }
-
-
 
 /*********************************
  * DOM & état
@@ -411,6 +457,9 @@ const resultsInline = qs('#resultsInline')
 const resultsList = qs('#resultsList')
 const resetResults = qs('#resetResults')
 
+// *** nouveau : conteneur des sliders unites (créé dynamiquement) ***
+let unitesPanel = null
+
 const state = {
   imageUrl: null,
   imageInfo: null,
@@ -429,6 +478,87 @@ const state = {
   labels: [],
   palette: [],
   customResults: [],
+  // mix % conversions (affiché seulement en mode "unites")
+  unitesMix: { m: 33, L: 34, g: 33 },
+}
+
+/*********************************
+ * UI: panneau sliders pour "unites"
+ *********************************/
+function ensureUnitesPanel() {
+  if (unitesPanel) return unitesPanel
+  const after = opsMode?.closest('label') || opsMode || document.body
+  const wrap = document.createElement('div')
+  wrap.id = 'unitesMixPanel'
+  wrap.style.marginTop = '8px'
+  wrap.style.padding = '8px'
+  wrap.style.border = '1px dashed #ddd'
+  wrap.style.borderRadius = '8px'
+  wrap.style.display = 'none' // visible seulement en mode "unites"
+  wrap.innerHTML = `
+    <div style="font-weight:600;margin-bottom:6px">Répartition Conversions : <span id="mixTotal">(= 100%)</span></div>
+    <div class="mixRow" style="display:flex;align-items:center;gap:8px;margin:6px 0">
+      <span style="width:80px">? m</span>
+      <input id="mixM" type="range" min="0" max="100" step="1" value="${state.unitesMix.m}" style="flex:1">
+      <output id="mixMVal" style="width:38px;text-align:right">${state.unitesMix.m}%</output>
+    </div>
+    <div class="mixRow" style="display:flex;align-items:center;gap:8px;margin:6px 0">
+      <span style="width:80px">? L</span>
+      <input id="mixL" type="range" min="0" max="100" step="1" value="${state.unitesMix.L}" style="flex:1">
+      <output id="mixLVal" style="width:38px;text-align:right">${state.unitesMix.L}%</output>
+    </div>
+    <div class="mixRow" style="display:flex;align-items:center;gap:8px;margin:6px 0">
+      <span style="width:80px">? g</span>
+      <input id="mixG" type="range" min="0" max="100" step="1" value="${state.unitesMix.g}" style="flex:1">
+      <output id="mixGVal" style="width:38px;text-align:right">${state.unitesMix.g}%</output>
+    </div>
+    <div class="muted small">Astuce : je garde la somme = 100% en ajustant automatiquement les autres curseurs.</div>
+  `
+  after.parentElement?.insertBefore(wrap, after.nextSibling)
+  unitesPanel = wrap
+
+  const mixM = qs('#mixM', wrap), mixMVal = qs('#mixMVal', wrap)
+  const mixL = qs('#mixL', wrap), mixLVal = qs('#mixLVal', wrap)
+  const mixG = qs('#mixG', wrap), mixGVal = qs('#mixGVal', wrap)
+  const recalc = (edited) => {
+    // Conserver somme = 100% en répartissant le delta sur les deux autres proportionnellement
+    let m = Number(mixM.value), L = Number(mixL.value), g = Number(mixG.value)
+    let sum = m + L + g
+    if (sum === 100) {
+      state.unitesMix = { m, L, g }
+    } else {
+      const others = edited === 'm' ? ['L','g'] : edited === 'L' ? ['m','g'] : ['m','L']
+      const restOld = others[0]==='m'? m : others[0]==='L'? L : g
+      const restOld2 = others[1]==='m'? m : others[1]==='L'? L : g
+      const editedVal = edited==='m'? m : edited==='L'? L : g
+      const remain = 100 - editedVal
+      const oldSumOthers = restOld + restOld2 || 1
+      const v1 = Math.round(remain * (restOld / oldSumOthers))
+      const v2 = remain - v1
+      if (others[0] === 'm') m = v1
+      else if (others[0] === 'L') L = v1
+      else g = v1
+      if (others[1] === 'm') m = v2
+      else if (others[1] === 'L') L = v2
+      else g = v2
+      state.unitesMix = { m, L, g }
+      mixM.value = String(m); mixL.value = String(L); mixG.value = String(g)
+    }
+    mixMVal.textContent = `${state.unitesMix.m}%`
+    mixLVal.textContent = `${state.unitesMix.L}%`
+    mixGVal.textContent = `${state.unitesMix.g}%`
+    redrawSVG()
+  }
+  mixM.addEventListener('input', () => recalc('m'))
+  mixL.addEventListener('input', () => recalc('L'))
+  mixG.addEventListener('input', () => recalc('g'))
+
+  return wrap
+}
+
+function toggleUnitesPanel() {
+  const panel = ensureUnitesPanel()
+  panel.style.display = (state.opsMode === 'unites') ? '' : 'none'
 }
 
 /*********************************
@@ -450,7 +580,7 @@ fileInput?.addEventListener('change', (e) => {
 ;['input','change'].forEach(ev => {
   cols?.addEventListener(ev, () => { state.cols = parseInt(cols.value,10); colsVal.textContent = cols.value; scheduleProcess() })
   numColors?.addEventListener(ev, () => { state.numColors = parseInt(numColors.value,10); numColorsVal.textContent = numColors.value; scheduleProcess() })
-  opsMode?.addEventListener(ev, () => { state.opsMode = opsMode.value; redrawSVG() })
+  opsMode?.addEventListener(ev, () => { state.opsMode = opsMode.value; toggleUnitesPanel(); redrawSVG() })
   difficulty?.addEventListener(ev, () => { state.difficulty = difficulty.value; redrawSVG() })
   cellPx?.addEventListener(ev, () => { state.cellPx = parseInt(cellPx.value,10); cellPxVal.textContent = cellPx.value; redrawSVG() })
   mergeSameColor?.addEventListener(ev, () => { state.mergeSameColor = mergeSameColor.checked; redrawSVG() })
@@ -553,15 +683,15 @@ function renderResultsEditor(){
     const sw = document.createElement('span'); sw.className='swatch'; sw.style.background=`rgb(${c[0]},${c[1]},${c[2]})`
     const name = document.createElement('span'); name.className='muted small'; name.textContent = `Couleur ${i+1}`
     const lab = document.createElement('span'); lab.className='muted small'; lab.textContent = 'Résultat :'
-    const input = document.createElement('input'); input.type='number'; input.min='1'; input.max='9999'
+    const input = document.createElement('input'); input.type='number'; input.min='1'; input.max='9999'; input.step='0.1'
     const wanted = state.customResults[i] ?? (i+2)
-    input.value = Math.max(1, Math.floor(wanted))
+    input.value = Math.max(1, Number(wanted))
     input.addEventListener('input', ()=>{
       let n = Number(input.value)
       if (!Number.isFinite(n)) n = 1
-      n = clamp(Math.round(n), 1, 9999) // pas de 0
+      n = clamp(n, 1, 9999)
       state.customResults[i] = n
-      input.value = n
+      input.value = String(n)
       redrawSVG()
     })
     row.append(sw, name, lab, input); resultsList.append(row)
@@ -569,36 +699,34 @@ function renderResultsEditor(){
 }
 
 /*********************************
- * SVG (grille) — responsive, net
+ * SVG (grille)
  *********************************/
 function redrawSVG(){
   if (!svgContainer) return
   const W = state.gridWidth, H = state.gridHeight
   const labels = state.labels, palette = state.palette
-  if (!W || !H || !labels.length || !palette.length) { svgContainer.innerHTML = '<div class="muted">La grille s\'affichera ici.</div>'; return }
+  if (!W || !H || !labels.length || !palette.length) { svgContainer.innerHTML = '<div class="muted">La grille s\'affichera ici.</div>'; toggleUnitesPanel(); return }
 
   const cell = clamp(state.cellPx, 16, 200)
   const Wpx = W * cell
   const Hpx = H * cell
 
   const rng = mulberry32(state.seed)
-  const numberColorMap = palette.map((color,i)=> ({ value: Math.max(1, Math.floor(state.customResults[i] ?? (i+2))), color })) // mini 1
+  const numberColorMap = palette.map((color,i)=> ({
+    value: Math.max(1, Number(state.customResults[i] ?? (i+2))), // pas de 0
+    color
+  }))
+
   const exprBank = {}
   if (state.showOps) {
     for (const e of numberColorMap) {
-      const arr = exprBankForResult(e.value, state.opsMode, rng, state.difficulty)
-      // filet de sécurité : toujours au moins une question pour conversions/temps
-      if ((!arr || !arr.length) && (state.opsMode==='unites' || state.opsMode==='temps')) {
-        // fallback simple cohérent
-        if (state.opsMode==='unites') {
-          if (e.value%10===0) exprBank[e.value] = [`${e.value/10} cm = ? mm`]
-          else exprBank[e.value] = [`${e.value} mm = ? cm`]
-        } else { // temps
-          exprBank[e.value] = [`${e.value} min = ? s`]
-        }
-      } else {
-        exprBank[e.value] = arr
-      }
+      const v = e.value
+      const arr = exprBankForResult(v, state.opsMode, rng, state.difficulty) || []
+      if ((!arr.length) && (state.opsMode==='unites' || state.opsMode==='temps')) {
+        // Fallback minimal lisible
+        if (state.opsMode==='unites') exprBank[v] = [`${v*100} cm = ? m`]
+        else exprBank[v] = [`${v} min = ? s`]
+      } else exprBank[v] = arr
     }
   }
 
@@ -615,9 +743,8 @@ function redrawSVG(){
       const val = numberColorMap[r.k]?.value ?? 1
       let exprs = exprBank[val] || []
       if (!exprs.length) {
-        // pour l'arithmétique, dernière roue si jamais vide (rare) sans "= ?"
-        if (state.opsMode==='unites' || state.opsMode==='temps') exprs = [`=${GLUE}?`]
-        else exprs = [`${Math.max(0, val-1)} + 1`]
+        if (state.opsMode==='unites' || state.opsMode==='temps') exprs = [`= ?`]
+        else exprs = [`${Math.max(0, Math.round(val)-1)} + 1`]
       }
       const expr = exprs[(r.x + r.y + r.k) % exprs.length]
       const L = layoutExpression(expr, rw, rh)
@@ -637,6 +764,7 @@ function redrawSVG(){
 
   s += `</svg>`
   svgContainer.innerHTML = s
+  toggleUnitesPanel()
 }
 
 /*********************************
@@ -673,4 +801,5 @@ function openPNGInNewTab(){
  * Bootstrap
  *********************************/
 renderStatus()
+toggleUnitesPanel()
 redrawSVG()
