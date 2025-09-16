@@ -164,33 +164,41 @@ function layoutExpression(expr, rw, rh) {
 /*********************************
  * Banque d’énoncés
  *********************************/
-function exprBankForResult(target, mode, rng, difficulty='facile'){
+function exprBankForResult(targetRaw, mode, rng, difficulty='facile'){
   if (!mode) return []
-  const list=[]
 
-  // format décimal FR
-  const fmtFr = (n, maxDec=2) => {
-    const v = Number.isInteger(n) ? String(n) : Number(n.toFixed(maxDec)).toString()
-    const [a,b] = v.split('.')
+  // Helpers
+  const list=[]
+  const fmtFr = (n, maxDec=3) => {
+    if (!Number.isFinite(n)) return String(n)
+    const s = Number.isInteger(n) ? String(n) : Number(n.toFixed(maxDec)).toString()
+    const [a,b] = s.split('.')
     return b ? `${a},${b.replace(/0+$/,'')}` : a
   }
-
-  // Ajoute une expression en respectant les règles de suffixe / pas de 0
+  const banZeroComp = (s) => /\b0\s*(km|m|cm|mm|kg|g|L|mL|h|min|s|j)\b/.test(s)
   const addExpr = (s) => {
     if (!s) return
-    // bannit " 0 " comme composante d’unité (ex: "0 km", "0 L"…)
-    if (/\b0\s*(km|m|cm|mm|kg|g|L|mL|h|min|s|j)\b/.test(s)) return
-    // pour conversions/temps : coller le suffixe
-    if (mode === 'unites' || mode === 'temps') {
-      s = s.replace(/=\s*\?\s*([^\s]+)/, `=${GLUE}?${GLUE}$1`)
-    } else {
-      // arithmétique : jamais de "= ?"
-      if (/=\s*\?/.test(s)) return
-    }
+    if (banZeroComp(s)) return
+    if (mode === 'unites' || mode === 'temps') s = s.replace(/=\s*\?\s*([^\s]+)/, `= ? $1`)
+    else if (/=\s*\?/.test(s)) return // pas de "= ?" en arithmétique
     if (!list.includes(s)) list.push(s)
   }
+  const shuffleInPlace = (arr) => { for (let i=arr.length-1;i>0;i--){ const j=Math.floor(rng()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]] } }
+  const interleaveBalanced = (buckets) => {
+    // mélange interne, puis round-robin pour préserver la proportion
+    buckets.forEach(b => shuffleInPlace(b))
+    const out=[]; let i=0
+    while (true) {
+      let pushed=false
+      for (const b of buckets) { if (i < b.length) { out.push(b[i]); pushed=true } }
+      if (!pushed) break
+      i++
+    }
+    return out
+  }
 
-  // ====== MODES ARITHMÉTIQUES (sans "= ?") ======
+  /************* ARITHMÉTIQUE (inchangé, sans "= ?") *************/
+  const target = targetRaw
   const add2=()=>{ for(let a=0;a<=target;a++){ const b=target-a; if(b>=0) addExpr(`${a} + ${b}`) } }
   const sub2=()=>{ for(let a=target;a<=target+40;a++){ const b=a-target; if(b>=0) addExpr(`${a} - ${b}`) } }
   const mult2=()=>{ for(let a=1;a<=20;a++){ if(target%a===0){ const b=target/a; if(b>=1&&b<=20) addExpr(`${a} × ${b}`) } } }
@@ -240,127 +248,144 @@ function exprBankForResult(target, mode, rng, difficulty='facile'){
     }
   }
 
-  /************* CONVERSIONS (toujours "= ? unité", pas de composante 0, unités question ≠ unité réponse, décimales possibles) *************/
-  if (mode === 'unites' && target >= 1) {
-    // mm, cm, m, km ; g, kg ; mL, L
-    // Helpers locaux pour pousser des variantes propres
-    // Longueurs -> mm (question sans mm, composants >=1)
-    ;(function toMM(){
-      // a m b cm = ? mm
-      for (let a=1; 1000*a+10<=target; a++){
-        const rest = target - 1000*a
-        if (rest>=10 && rest%10===0){
-          const b = rest/10
-          if (b>=1) addExpr(`${a} m ${b} cm = ? mm`)
-        }
-      }
-      // x, y décimaux : x, y > 0
-      // p.ex. 1,2 m = ? mm  (si target multiple de 10)
-      if (target%10===0){
-        const m = target/1000
-        if (m>0) addExpr(`${fmtFr(m,3)} m = ? mm`)
-      }
-      // z, w décimaux en cm : 12,3 cm = ? mm
-      if (target>=1){
-        for (let d=1; d<=9; d++){
-          if ((target - d) > 0 && (target - d)%10===0){
-            const cm = (target - d)/10 + d/10
-            if (cm>0) addExpr(`${fmtFr(cm,1)} cm = ? mm`)
-          }
-        }
-      }
-      // km + m = ? mm (si pas trop long)
-      if (target % 1000 === 0){
-        const m = target / 1000
-        if (m >= 1){
-          const km = Math.max(1, Math.floor(m/2000))
-          const rm = m - 1000*km
-          if (km>=1 && rm>=1) addExpr(`${km} km ${rm} m = ? mm`)
-        }
-      }
-    })();
+  /************* CONVERSIONS — équilibre m / L / g *************/
+  if (mode === 'unites') {
+    const Tm = Number(targetRaw)        // résultat en mètres
+    const TL = Number(targetRaw)        // résultat en litres
+    const Tg = Math.round(Number(targetRaw)) // résultat en grammes (on reste sur un entier propre)
 
-    // Longueurs -> cm (question sans cm)
-    ;(function toCM(){
-      // a m b mm = ? cm
-      for (let a=1; 100*a+1<=target; a++){
-        const mm = 10*(target - 100*a)
-        if (mm>=10) addExpr(`${a} m ${mm} mm = ? cm`)
-      }
-      // km + m -> ? cm (si target multiple 100)
-      if (target%100===0){
-        const totM = target/100
-        if (totM>=2){
-          const a = Math.max(1, Math.floor(totM/2000))
-          const b = totM - 1000*a
-          if (a>=1 && b>=1) addExpr(`${a} km ${b} m = ? cm`)
-        }
-      }
-      // m décimal -> ? cm
-      if (target%100===0){
-        const m = target/100
-        if (m>0) addExpr(`${fmtFr(m,2)} m = ? cm`)
-      }
-      // mm -> ? cm (autorise décimale en résultat, mais question sans cm)
-      if (target>=1) addExpr(`${target*10} mm = ? cm`)
-    })();
+    const Qm = []  // -> ? m
+    const QL = []  // -> ? L
+    const Qg = []  // -> ? g
 
-    // Longueurs -> m (question sans m)
-    ;(function toM(){
-      // a km b cm = ? m
-      for (let a=1; 1000*a+0<=target; a++){
-        const cm = 100*(target - 1000*a)
-        if (cm>=100) addExpr(`${a} km ${cm} cm = ? m`)
-      }
-      // cm + mm = ? m
-      for (let mm=10; mm<=990; mm+=10){
-        const cm = target - mm/10
-        if (cm>=1) { addExpr(`${cm} cm ${mm} mm = ? m`); break }
-      }
-      // km décimal -> ? m
-      if (target%1000===0){
-        const km = target/1000
-        if (km>0) addExpr(`${fmtFr(km,3)} km = ? m`)
-      }
-      // mm -> ? m (question sans m)
-      if (target>=1) addExpr(`${target*1000} mm = ? m`)
-    })();
+    // === mètre : question sans "m"
+    // cm + mm = ? m (beaucoup de variantes)
+    for (let mm=10; mm<=990; mm+=10){
+      const cm = Math.round(Tm*100 - mm/10)
+      if (cm>=1) Qm.push(`${cm} cm ${mm} mm = ? m`)
+      if (Qm.length>=16) break
+    }
+    // mm seul (variante simple)
+    if (Tm>0) Qm.push(`${Math.round(Tm*1000)} mm = ? m`)
+    // km décimal
+    if (Tm>0) Qm.push(`${fmtFr(Tm/1000,3)} km = ? m`)
 
-    // Masses -> g (question sans g seul)
-    ;(function massToG(){
-      if (target>1){
-        const a = Math.floor(Math.max(1, (target-1)/1000))
-        const b = target - 1000*a
-        if (a>=1 && b>=1) addExpr(`${a} kg ${b} g = ? g`)
-      }
-      if (target%1000===0){
-        const kg = target/1000
-        if (kg>0) addExpr(`${fmtFr(kg,3)} kg = ? g`)
-      }
-    })();
+    // === litre : question sans "L"
+    // mL seul
+    if (TL>0) {
+      QL.push(`${Math.round(TL*1000)} mL = ? L`)
+      // mL + mL (deux contenants)
+      const a = Math.max(1, Math.floor(TL*1000/2))
+      const b = Math.round(TL*1000 - a)
+      if (a>=1 && b>=1) QL.push(`${a} mL ${b} mL = ? L`)
+    }
 
-    // Volumes -> mL (question sans mL seul)
-    ;(function volToML(){
-      if (target>1){
-        const a = Math.floor(Math.max(1, (target-1)/1000))
-        const b = target - 1000*a
-        if (a>=1 && b>=1) addExpr(`${a} L ${b} mL = ? mL`)
-      }
-      if (target%1000===0){
-        const L = target/1000
-        if (L>0) addExpr(`${fmtFr(L,3)} L = ? mL`)
-      }
-    })();
+    // === gramme : question sans "g"
+    // kg décimal
+    if (Tg>0) Qg.push(`${fmtFr(Tg/1000,3)} kg = ? g`)
+    // kg entier + kg décimal… (sans afficher "g")
+    if (Tg>=1000) {
+      const kgInt = Math.floor(Tg/1000)
+      const kgDec = (Tg/1000) - kgInt
+      if (kgDec>0) Qg.push(`${fmtFr(kgInt+kgDec,3)} kg = ? g`)
+      if (kgInt>=1 && Tg-kgInt*1000>=1) Qg.push(`${kgInt+kgDec===kgInt?kgInt:fmtFr(kgInt+kgDec,3)} kg = ? g`)
+    }
 
-    // Distances -> m (km + m), variante simple
-    ;(function distToM(){
-      if (target>1000){
-        const a = Math.floor((target-1)/1000)
-        const b = target - 1000*a
-        if (a>=1 && b>=1) addExpr(`${a} km ${b} m = ? m`)
-      }
-    })();
+    // Équilibrage (= interleave)
+    const balanced = interleaveBalanced([Qm, QL, Qg])
+    list.length = 0
+    balanced.forEach(s => addExpr(s))
+    return list
   }
+
+  /************* TEMPS — équilibre ? s / ? min / ? h / ? j *************/
+  if (mode === 'temps') {
+    const qs=[] , qmin=[] , qh=[] , qj=[]
+
+    // --- ? s : question en h/min (ou j/h/min), sans "s"
+    {
+      const S = Math.round(Number(targetRaw))
+      for (let h=1; h<=Math.floor(S/3600); h++){
+        const rem = S - 3600*h
+        if (rem>=60 && rem%60===0){
+          const m = rem/60
+          if (m>=1) qs.push(`${h} h ${m} min = ? s`)
+        }
+        if (qs.length>=10) break
+      }
+      for (let j=1; j<=Math.floor(S/86400); j++){
+        const rJ = S - 86400*j
+        for (let h=1; h<=Math.floor(rJ/3600); h++){
+          const rem = rJ - 3600*h
+          if (rem>=60 && rem%60===0){ const m = rem/60; if (m>=1) { qs.push(`${j} j ${h} h ${m} min = ? s`); break } }
+        }
+        if (qs.length>=16) break
+      }
+      if (S%60===0 && S>=120) qs.push(`${S/60} min = ? s`)
+    }
+
+    // --- ? min : question en h/s (ou j/h/s), sans "min"
+    {
+      const M = Math.round(Number(targetRaw))
+      for (let h=1; h<=Math.floor(M/2); h++){
+        const rem = M - h
+        if (rem>=1) qmin.push(`${h} h ${rem*60} s = ? min`)
+        if (qmin.length>=12) break
+      }
+      for (let j=1; j<=Math.floor(M/1440); j++){
+        const rJ = M - 1440*j
+        for (let h=1; h<=Math.floor(rJ/60); h++){
+          const rem = rJ - 60*h
+          if (rem>=1) { qmin.push(`${j} j ${h} h ${rem*60} s = ? min`); break }
+        }
+        if (qmin.length>=16) break
+      }
+      qmin.push(`${M*60} s = ? min`)
+    }
+
+    // --- ? h : question en min/s (ou j/min), sans "h"
+    {
+      const H = Math.round(Number(targetRaw))
+      const totS = H*3600
+      if (totS>3600){
+        const min = Math.max(1, Math.floor((totS-1)/60) - 10)
+        const s = totS - 60*min
+        if (min>=1 && s>=1 && s<3600) qh.push(`${min} min ${s} s = ? h`)
+      }
+      for (let j=1; j<=Math.floor(totS/86400); j++){
+        const rem = totS - 86400*j
+        if (rem>=60 && rem%60===0){ const m = rem/60; if (m>=1) qh.push(`${j} j ${m} min = ? h`) }
+        if (qh.length>=16) break
+      }
+    }
+
+    // --- ? j : question en h/min/s, sans "j"
+    {
+      const J = Math.round(Number(targetRaw))
+      const totS = J*86400
+      for (let h=1; h<=Math.floor(totS/3600)-1; h++){
+        const rem = totS - 3600*h
+        if (rem>=60 && rem%60===0){ const m = rem/60; if (m>=1) { qj.push(`${h} h ${m} min = ? j`); if (qj.length>=12) break } }
+      }
+      if (totS>=120){
+        const min = Math.max(1, Math.floor(totS/120))
+        const s = totS - 60*min
+        if (s>=60) qj.push(`${min} min ${s} s = ? j`)
+      }
+    }
+
+    // Équilibrage (= interleave 4 seaux)
+    const balanced = interleaveBalanced([qs, qmin, qh, qj])
+    list.length = 0
+    balanced.forEach(s => addExpr(s))
+    return list
+  }
+
+  // Par défaut (arithmétique) : on mélange pour la variété
+  shuffleInPlace(list)
+  return list
+}
+
 
   /************* TEMPS (toujours "= ? unité", pas de "×", pas de composante 0 ; unités réponse : s / min / h / j) *************/
   if (mode === 'temps' && target >= 1) {
