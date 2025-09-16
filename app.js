@@ -700,8 +700,6 @@ function openPNGInNewTab(){
 /*********************************
  * Bootstrap
  *********************************/
-function renderPixelPreview(gw, gh, labels, palette) {
-  // (doublon déplacé ici pour garder la lecture compacte)
-}
+
 renderStatus()
 redrawSVG()
