@@ -169,6 +169,97 @@ function exprBankForResult(target, mode, rng, difficulty='facile'){
         for(let a=1;a<=lim;a++) for(let b=1;b<=lim;b++) for(let c=0;c<=maxN;c++){ const prod=a*b; const dAdd=target-prod-c; if(dAdd>=0&&d<=maxN) pushUnique(`${a} × ${b} + ${c} + ${dAdd}`); const dSub=prod+c-target; if(dSub>=0&&dSub<=maxN) pushUnique(`${a} × ${b} + ${c} - ${dSub}`); const dSub2=prod-c-target; if(dSub2>=0&&dSub2<=maxN) pushUnique(`${a} × ${b} - ${c} - ${dSub2}`) }
         for(let a=1;a<=lim;a++) for(let b=1;b<=lim;b++) for(let c=1;c<=lim;c++){ if(a*b % c === 0){ const base=(a*b)/c; const d=target-base; if(d>=0&&d<=maxN) pushUnique(`(${a} × ${b}) ÷ ${c} + ${d}`) } }
       }
+        // --- NOUVEAU : conversions d'unités (longueurs, masses, contenances, distances)
+  if (mode === "unites") {
+    // Le principe : pour un "target" donné, on fabrique des expressions dont la
+    // conversion donne EXACTEMENT "target" dans l'unité demandée.
+    // On vise des réponses entières adaptées au CM1–CM2.
+
+    // Longueurs -> mm : a m b cm c mm = ? mm  (1000a + 10b + c = target)
+    {
+      const a = Math.floor(target / 1000);
+      const rem = target % 1000;
+      const b = Math.floor(rem / 10);
+      const c = rem % 10;
+      pushUnique(`${a} m ${b} cm ${c} mm = ? mm`);
+    }
+
+    // Longueurs -> cm : a m b cm = ? cm  (100a + b = target)
+    {
+      const a = Math.floor(target / 100);
+      const b = target % 100;
+      pushUnique(`${a} m ${b} cm = ? cm`);
+    }
+
+    // Distances -> m : a km b m = ? m  (1000a + b = target)
+    {
+      const a = Math.floor(target / 1000);
+      const b = target % 1000;
+      pushUnique(`${a} km ${b} m = ? m`);
+    }
+
+    // Masse -> g : a kg b g = ? g  (1000a + b = target)
+    {
+      const a = Math.floor(target / 1000);
+      const b = target % 1000;
+      pushUnique(`${a} kg ${b} g = ? g`);
+    }
+
+    // Contenance -> mL : a L b mL = ? mL  (1000a + b = target)
+    {
+      const a = Math.floor(target / 1000);
+      const b = target % 1000;
+      pushUnique(`${a} L ${b} mL = ? mL`);
+    }
+
+    // Variantes simples de produit (aide au calcul mental)
+    // On fabrique des nombres faciles menant à "target".
+    {
+      // x × 10 = target -> x = target/10 si entier
+      if (target % 10 === 0) pushUnique(`${target/10} cm = ? mm`);
+      // x × 100 = target -> x = target/100 si entier
+      if (target % 100 === 0) pushUnique(`${target/100} m = ? cm`);
+      // x × 1000 = target -> x = target/1000 si entier
+      if (target % 1000 === 0) {
+        pushUnique(`${target/1000} kg = ? g`);
+        pushUnique(`${target/1000} L = ? mL`);
+        pushUnique(`${target/1000} km = ? m`);
+      }
+    }
+  }
+
+  // --- NOUVEAU : temps (heures/minutes/secondes) -> résultat en minutes ou en secondes
+  if (mode === "temps") {
+    // On crée plusieurs énoncés qui valent "target".
+    // 1) Réponse en minutes : a h b min = ? min
+    {
+      const h = Math.floor(target / 60);
+      const m = target % 60;
+      pushUnique(`${h} h ${m} min = ? min`);
+      // Si cible multiple de 60 : variante "h seulement"
+      if (m === 0) pushUnique(`${h} h = ? min`);
+    }
+
+    // 2) Réponse en secondes : a min b s = ? s  (optionnel mais utile CM2)
+    //    60*a + b = target  -> on fabrique a et b en conséquence
+    {
+      const a = Math.floor(target / 60);
+      const b = target % 60;
+      pushUnique(`${a} min ${b} s = ? s`);
+      if (b === 0) pushUnique(`${a} min = ? s`);
+    }
+
+    // 3) Petites décompositions utiles au calcul mental
+    //    ex: 90 min = 1 h 30 min  -> mais on garde la réponse en minutes
+    {
+      if (target >= 30 && target % 15 === 0) {
+        const q = target / 15;
+        pushUnique(`${q} × 15 min = ? min`);
+      }
+      if (target >= 20 && target % 10 === 0) {
+        const q = target / 10;
+        pushUnique(`${q} × 10 min = ? min`);
+      }
     }
   }
   for (let i=list.length-1;i>0;i--){ const j=Math.floor(rng()*(i+1)); [list[i],list[j]]=[list[j],list[i]] }
