@@ -1,12 +1,12 @@
 'use strict'
 /*
-  Coloriage Magique — app.js (version finale)
-  ✓ Aperçu PIXELLISÉ net, proportionnel (zoom entier, resize-aware)
-  ✓ Grille SVG responsive (viewBox + width:100%), UI non déformée
-  ✓ Résultats par couleur RENDUS SOUS LA GRILLE (même bloc HTML)
-  ✓ Export PNG à TAILLE RÉELLE (1:1, sans flou)
-  ✓ K-means RGB, contraste/saturation, fusion des cellules, opérations par difficulté
-  100% offline, aucune dépendance externe
+  Coloriage Magique — app.js (version avec conversions & temps enrichis)
+  ✓ Aperçu PIXELLISÉ net (responsive)
+  ✓ Grille SVG responsive
+  ✓ Résultats par couleur sous la grille
+  ✓ Export PNG 1:1
+  ✓ K-means, contraste/saturation, fusion cellules
+  ✓ Banques d’énoncés riches (add/sub/mult/div + conversions + temps)
 */
 
 /*********************************
@@ -132,301 +132,322 @@ function layoutExpression(expr, rw, rh) {
   return { mode:'none', lines:[], font:0, pad }
 }
 
+/*********************************
+ * Banque d’énoncés pour un résultat donné
+ *********************************/
 function exprBankForResult(target, mode, rng, difficulty='facile'){
   if (!mode) return []
   const list=[]
-  const pushUnique = (s) => { if (!list.includes(s)) list.push(s) }
+  const pushUnique = (s) => { if (s && !list.includes(s)) list.push(s) }
 
-  const add2 = () => {
-    for (let a=0; a<=target; a++) {
-      const b = target - a
-      if (b >= 0) pushUnique(`${a} + ${b}`)
-    }
+  // small utils (format décimal FR)
+  const fmtFr = (n, maxDec=2) => {
+    const f = Number.isInteger(n) ? String(n) : Number(n.toFixed(maxDec)).toString()
+    const [a,b] = f.split('.')
+    return b ? `${a},${b.replace(/0+$/,'')}` : a
   }
-  const sub2 = () => {
-    for (let a=target; a<=target+40; a++) {
-      const b = a - target
-      if (b >= 0) pushUnique(`${a} - ${b}`)
-    }
-  }
-  const mult2 = () => {
-    for (let a=1; a<=20; a++) {
-      if (target % a === 0) {
-        const b = target / a
-        if (b >= 1 && b <= 20) pushUnique(`${a} × ${b}`)
-      }
-    }
-  }
-  const div2 = () => {
-    for (let b=1; b<=20; b++) {
-      const a = target * b
-      if (a <= 800) pushUnique(`${a} ÷ ${b}`)
-    }
-  }
+  const between = (n, a, b) => n>=a && n<=b
+
+  // --- Modes classiques
+  const add2=()=>{ for(let a=0;a<=target;a++){ const b=target-a; if(b>=0) pushUnique(`${a} + ${b}`) } }
+  const sub2=()=>{ for(let a=target;a<=target+40;a++){ const b=a-target; if(b>=0) pushUnique(`${a} - ${b}`) } }
+  const mult2=()=>{ for(let a=1;a<=20;a++){ if(target%a===0){ const b=target/a; if(b>=1&&b<=20) pushUnique(`${a} × ${b}`) } } }
+  const div2 =()=>{ for(let b=1;b<=20;b++){ const a=target*b; if(a<=800) pushUnique(`${a} ÷ ${b}`) } }
 
   if (["add","addsub","mix"].includes(mode)) add2()
   if (["addsub","mix"].includes(mode)) sub2()
   if (["mult","multdiv","mix"].includes(mode)) mult2()
   if (["multdiv","mix"].includes(mode)) div2()
 
-  const maxN = (difficulty==='facile') ? 0 : (difficulty==='moyen' ? 12 : 20)
-
-  if (maxN > 0) {
-    if (["add","addsub","mix"].includes(mode)) {
-      for (let a=0; a<=maxN; a++)
-        for (let b=0; b<=maxN; b++) {
-          const c = target - a - b
-          if (c >= 0 && c <= maxN) pushUnique(`${a} + ${b} + ${c}`)
+  const maxN = difficulty==='facile'?0:(difficulty==='moyen'?12:20)
+  if (maxN>0){
+    if (["add","addsub","mix"].includes(mode)){
+      for(let a=0;a<=maxN;a++) for(let b=0;b<=maxN;b++){ const c=target-a-b; if(c>=0&&c<=maxN) pushUnique(`${a} + ${b} + ${c}`) }
+      if (difficulty==='difficile'){
+        for(let a=0;a<=maxN;a++) for(let b=0;b<=maxN;b++){ const c=a+b-target; if(c>=0&&c<=maxN) pushUnique(`${a} + ${b} - ${c}`) }
+      }
+    }
+    if (["mult","multdiv","mix"].includes(mode)){
+      const lim=Math.max(12,Math.min(20,maxN))
+      for(let a=1;a<=lim;a++) for(let b=1;b<=lim;b++){ const prod=a*b; const cAdd=target-prod; if(cAdd>=0&&cAdd<=maxN) pushUnique(`${a} × ${b} + ${cAdd}`); const cSub=prod-target; if(cSub>=0&&cSub<=maxN) pushUnique(`${a} × ${b} - ${cSub}`) }
+    }
+    if (difficulty==='difficile' && ["mult","multdiv","mix"].includes(mode)){
+      for(let a=1;a<=12;a++) for(let b=1;b<=12;b++) for(let c=1;c<=12;c++){ if(a*b % c === 0 && (a*b)/c === target) pushUnique(`(${a} × ${b}) ÷ ${c}`) }
+    }
+    if (difficulty==='difficile'){
+      if (["add","addsub","mix"].includes(mode)){
+        for(let a=0;a<=maxN;a++) for(let b=0;b<=maxN;b++) for(let c=0;c<=maxN;c++){ const d=target-a-b-c; if(d>=0&&d<=maxN) pushUnique(`${a} + ${b} + ${c} + ${d}`) }
+        for(let a=0;a<=maxN;a++) for(let b=0;b<=maxN;b++) for(let c=0;c<=maxN;c++){ const d=a+b+c-target; if(d>=0&&d<=maxN) pushUnique(`${a} + ${b} + ${c} - ${d}`) }
+      }
+      if (["mult","multdiv","mix"].includes(mode)){
+        const lim=12
+        for(let a=1;a<=lim;a++) for(let b=1;b<=lim;b++) for(let c=0;c<=maxN;c++){
+          const prod=a*b
+          const dAdd=target-prod-c; if(dAdd>=0&&dAdd<=maxN) pushUnique(`${a} × ${b} + ${c} + ${dAdd}`)
+          const dSub=prod+c-target; if(dSub>=0&&dSub<=maxN) pushUnique(`${a} × ${b} + ${c} - ${dSub}`)
+          const dSub2=prod-c-target; if(dSub2>=0&&dSub2<=maxN) pushUnique(`${a} × ${b} - ${c} - ${dSub2}`)
         }
-      if (difficulty === 'difficile') {
-        for (let a=0; a<=maxN; a++)
-          for (let b=0; b<=maxN; b++) {
-            const c = a + b - target
-            if (c >= 0 && c <= maxN) pushUnique(`${a} + ${b} - ${c}`)
+        for(let a=1;a<=lim;a++) for(let b=1;b<=lim;b++) for(let c=1;c<=lim;c++){
+          if(a*b % c === 0){
+            const base=(a*b)/c
+            const d=target-base
+            if(d>=0&&d<=maxN) pushUnique(`(${a} × ${b}) ÷ ${c} + ${d}`)
           }
+        }
       }
     }
+  }
 
-    if (["mult","multdiv","mix"].includes(mode)) {
-      const lim = Math.max(12, Math.min(20, maxN))
-      for (let a=1; a<=lim; a++)
-        for (let b=1; b<=lim; b++) {
-          const prod = a * b
-          const cAdd = target - prod
-          if (cAdd >= 0 && cAdd <= maxN) pushUnique(`${a} × ${b} + ${cAdd}`)
-          const cSub = prod - target
-          if (cSub >= 0 && cSub <= maxN) pushUnique(`${a} × ${b} - ${cSub}`)
+  /************* MODE CONVERSIONS (unités différentes, pas de composantes 0, décimaux possibles dans la question) *************/
+  if (mode === 'unites') {
+    // Longueurs: mm, cm, m, km
+    // Masses: g, kg
+    // Volumes: mL, L
+    // Règles:
+    // - L'unité demandée (après "=? ...") est différente des unités présentes dans l'énoncé
+    // - On évite 0 composant
+    // - On autorise des valeurs décimales dans l'énoncé (formatées en FR: virgule)
+
+    // --- Longueurs vers mm (réponse en mm) : question sans mm
+    // m + cm -> ? mm
+    {
+      const aMax = Math.floor(target/1000)
+      for (let a=1; a<=aMax; a++) {
+        const rest = target - 1000*a
+        if (rest>=10 && rest%10===0) {
+          const b = rest/10
+          if (b>=1) pushUnique(`${a} m ${b} cm = ? mm`)
         }
-    }
-
-    if (difficulty === 'difficile' && ["mult","multdiv","mix"].includes(mode)) {
-      for (let a=1; a<=12; a++)
-        for (let b=1; b<=12; b++)
-          for (let c=1; c<=12; c++) {
-            if (a*b % c === 0 && (a*b)/c === target) pushUnique(`(${a} × ${b}) ÷ ${c}`)
+      }
+      // cm décimal -> ? mm (ex: 12,3 cm = ? mm)
+      if (target>=1) {
+        for (let d=1; d<=9; d++) { // 1 décimale
+          if ((target - d) % 10 === 0) {
+            const cm = (target - d)/10 + d/10
+            if (cm>0) pushUnique(`${fmtFr(cm)} cm = ? mm`)
           }
-    }
-
-    if (difficulty === 'difficile') {
-      if (["add","addsub","mix"].includes(mode)) {
-        for (let a=0; a<=maxN; a++)
-          for (let b=0; b<=maxN; b++)
-            for (let c=0; c<=maxN; c++) {
-              const d = target - a - b - c
-              if (d >= 0 && d <= maxN) pushUnique(`${a} + ${b} + ${c} + ${d}`)
-            }
-        for (let a=0; a<=maxN; a++)
-          for (let b=0; b<=maxN; b++)
-            for (let c=0; c<=maxN; c++) {
-              const d = a + b + c - target
-              if (d >= 0 && d <= maxN) pushUnique(`${a} + ${b} + ${c} - ${d}`)
-            }
-      }
-
-      if (["mult","multdiv","mix"].includes(mode)) {
-        const lim = 12
-        for (let a=1; a<=lim; a++)
-          for (let b=1; b<=lim; b++)
-            for (let c=0; c<=maxN; c++) {
-              const prod = a * b
-              const dAdd = target - prod - c
-              if (dAdd >= 0 && dAdd <= maxN) pushUnique(`${a} × ${b} + ${c} + ${dAdd}`)
-              const dSub = prod + c - target
-              if (dSub >= 0 && dSub <= maxN) pushUnique(`${a} × ${b} + ${c} - ${dSub}`)
-              const dSub2 = prod - c - target
-              if (dSub2 >= 0 && dSub2 <= maxN) pushUnique(`${a} × ${b} - ${c} - ${dSub2}`)
-            }
-        for (let a=1; a<=lim; a++)
-          for (let b=1; b<=lim; b++)
-            for (let c=1; c<=lim; c++) {
-              if (a*b % c === 0) {
-                const base = (a*b)/c
-                const d = target - base
-                if (d >= 0 && d <= maxN) pushUnique(`(${a} × ${b}) ÷ ${c} + ${d}`)
-              }
-            }
-      }
-    }
-  }
-
-  // ========= NOUVEAU MODE : CONVERSIONS D’UNITÉS =========
- // ========= NOUVEAU MODE : CONVERSIONS D’UNITÉS (sans "0", unités différentes) =========
-if (mode === "unites") {
-  // On génère des énoncés où l’unité demandée (réponse) est différente
-  // des unités utilisées dans la question, et on évite les "0 kg", "0 m", etc.
-  // On pousse plusieurs variantes possibles pour chaque target.
-
-  const addLenToMM = () => {
-    // Réponse en mm, question en m + cm (pas de mm dans l'énoncé)
-    // Cherche a>=1, b>=1 tel que 1000a + 10b = target  (+ reste c, on évite en l'absence)
-    // Si ce n’est pas possible, on tolère cm + mm (sans 0) — toujours possible.
-    let pushed = false
-    // Essai m + cm uniquement
-    for (let a = 1; a <= Math.floor(target / 1000); a++) {
-      const rest = target - 1000 * a
-      if (rest >= 10 && rest % 10 === 0) {
-        const b = rest / 10
-        if (b >= 1) {
-          pushUnique(`${a} m ${b} cm = ? mm`)
-          pushed = true
-          break
         }
       }
+      // m décimal -> ? mm (ex: 1,234 m = ? mm)
+      if (target%1000===0) {
+        const m = target/1000
+        if (m>=1) pushUnique(`${fmtFr(m)} m = ? mm`)
+      }
     }
-    if (!pushed) {
-      // cm + mm (éviter 0) — toujours faisable
-      // choisir mm dans [1..9] qui rend (target - mm) multiple de 10
-      for (let mm = 1; mm <= 9; mm++) {
-        if ((target - mm) > 0 && (target - mm) % 10 === 0) {
-          const cm = (target - mm) / 10
-          if (cm >= 1) { pushUnique(`${cm} cm ${mm} mm = ? mm`); break }
+
+    // --- Longueurs vers cm (réponse en cm) : question sans cm
+    // m + mm -> ? cm
+    {
+      const aMax = Math.floor(target/100)
+      for (let a=1; a<=aMax; a++) {
+        const mm = 10*(target - 100*a)
+        if (mm>=10) pushUnique(`${a} m ${mm} mm = ? cm`)
+      }
+      // km + m -> ? cm (si multiple de 100)
+      if (target%100===0) {
+        const totM = target/100
+        if (totM>=2) {
+          const a = Math.max(1, Math.floor(totM/2000))
+          const b = totM - 1000*a
+          if (a>=1 && b>=1) pushUnique(`${a} km ${b} m = ? cm`)
         }
       }
+      // m décimal -> ? cm
+      if (target%100===0) {
+        const m = target/100
+        if (m>0) pushUnique(`${fmtFr(m)} m = ? cm`)
+      }
     }
-  }
 
-  const addLenToCM = () => {
-    // Réponse en cm, question en m + mm (pas de "cm" dans la question)
-    // 100a + (mm/10) = target -> mm = 10*(target - 100a), mm >= 10
-    for (let a = 1; a <= Math.floor(target / 100); a++) {
-      const mm = 10 * (target - 100 * a)
-      if (mm >= 10) { pushUnique(`${a} m ${mm} mm = ? cm`); return }
+    // --- Longueurs vers m (réponse en m) : question sans m
+    // km + cm -> ? m
+    {
+      const aMax = Math.floor(target/1000)
+      for (let a=1; a<=aMax; a++) {
+        const cm = 100*(target - 1000*a)
+        if (cm>=100) pushUnique(`${a} km ${cm} cm = ? m`)
+      }
+      // cm + mm -> ? m (évite 0)
+      for (let mm=10; mm<=990; mm+=10) {
+        const cm = target - mm/10
+        if (cm>=1) { pushUnique(`${cm} cm ${mm} mm = ? m`); break }
+      }
+      // km décimal -> ? m
+      if (target%1000===0) {
+        const km = target/1000
+        if (km>0) pushUnique(`${fmtFr(km)} km = ? m`)
+      }
     }
-    // Sinon km + m -> cm : 100000a + 100b = target => target multiple de 100
-    if (target % 100 === 0) {
-      const totM = target / 100
-      if (totM >= 2) {
-        // a km b m, a>=1, b>=1
-        const a = Math.max(1, Math.floor(totM / 2000))
-        const b = totM - 1000 * a
-        if (a >= 1 && b >= 1) pushUnique(`${a} km ${b} m = ? cm`)
+
+    // --- Masses vers g (réponse en g) : question sans g seul
+    // kg + g -> ? g
+    {
+      if (target>1) {
+        const a = Math.floor(Math.max(1, (target-1)/1000))
+        const b = target - 1000*a
+        if (a>=1 && b>=1) pushUnique(`${a} kg ${b} g = ? g`)
+      }
+      // kg décimal -> ? g
+      if (target%1000===0) {
+        const kg = target/1000
+        if (kg>0) pushUnique(`${fmtFr(kg)} kg = ? g`)
+      }
+    }
+
+    // --- Volumes vers mL (réponse en mL) : question sans mL seul
+    // L + mL -> ? mL
+    {
+      if (target>1) {
+        const a = Math.floor(Math.max(1, (target-1)/1000))
+        const b = target - 1000*a
+        if (a>=1 && b>=1) pushUnique(`${a} L ${b} mL = ? mL`)
+      }
+      // L décimal -> ? mL
+      if (target%1000===0) {
+        const L = target/1000
+        if (L>0) pushUnique(`${fmtFr(L)} L = ? mL`)
+      }
+    }
+
+    // --- Distances vers m (réponse en m) : km + m (variantes)
+    {
+      if (target>1000) {
+        const a = Math.floor((target-1)/1000)
+        const b = target - 1000*a
+        if (a>=1 && b>=1) pushUnique(`${a} km ${b} m = ? m`)
       }
     }
   }
 
-  const addLenToM = () => {
-    // Réponse en m, question en km + cm (pas de "m" dans la question)
-    // 1000a + (cm/100) = target -> cm = 100*(target - 1000a), cm>=100
-    for (let a = 1; a <= Math.floor(target / 1000); a++) {
-      const cm = 100 * (target - 1000 * a)
-      if (cm >= 100) { pushUnique(`${a} km ${cm} cm = ? m`); return }
+  /************* MODE TEMPS (unités question ≠ unité réponse, pas de “× 60”, j/h/min/s, pas de 0) *************/
+  if (mode === 'temps') {
+    // cibles (=target) : valeur numérique attendue dans l’unité demandée
+
+    // Réponse en secondes -> question sans "seconde" seule (au moins 2 unités)
+    // j h min -> ? s
+    {
+      const S = target
+      // On fabrique j/h/min >=1 et s absents dans l'énoncé
+      // S = 86400*j + 3600*h + 60*m
+      // Cherche j,h,m >=1
+      for (let j=1; j<=Math.floor(S/86400); j++) {
+        const remJ = S - 86400*j
+        for (let h=1; h<=Math.floor(remJ/3600); h++) {
+          const remH = remJ - 3600*h
+          if (remH>=60 && remH%60===0) {
+            const m = remH/60
+            if (m>=1) pushUnique(`${j} j ${h} h ${m} min = ? s`)
+          }
+        }
+      }
+      // variante h + min (sans j) -> ? s
+      for (let h=1; h<=Math.floor(S/3600); h++) {
+        const remH = S - 3600*h
+        if (remH>=60 && remH%60===0) {
+          const m = remH/60
+          if (m>=1) pushUnique(`${h} h ${m} min = ? s`)
+        }
+      }
+      // min seul (sans h) -> ? s (éviter 0)
+      if (S%60===0 && S>=120) {
+        const m = S/60
+        pushUnique(`${m} min = ? s`)
+      }
     }
-    // Sinon cm + mm -> m : (cm + mm/10) = target -> mm multiple de 10
-    for (let mm = 10; mm <= 990; mm += 10) {
-      const cm = target - mm / 10
-      if (cm >= 1) { pushUnique(`${cm} cm ${mm} mm = ? m`); break }
+
+    // Réponse en minutes -> question sans "minute" seule
+    // j h s -> ? min  (on inclut s multiple de 60 pour rester entier)
+    {
+      const M = target
+      // j + h + s
+      for (let j=1; j<=Math.floor(M/1440); j++) {
+        const remJ = M - 1440*j
+        for (let h=1; h<=Math.floor(remJ/60); h++) {
+          const remH = M - 1440*j - 60*h
+          // remH = s/60 -> s multiple de 60 et >= 60
+          if (remH>=1) {
+            const s = remH * 60
+            pushUnique(`${j} j ${h} h ${s} s = ? min`)
+          }
+        }
+      }
+      // h + s -> ? min
+      if (M>=2) {
+        const h = Math.max(1, Math.floor(M/2)) // garde au moins 1 minute pour s
+        const rem = M - h
+        const s = rem * 60
+        if (h>=1 && rem>=1) pushUnique(`${h} h ${s} s = ? min`)
+      }
+      // j + h -> ? min
+      if (M>=1500) {
+        const j = 1
+        const h = M/60 - 24
+        if (Number.isInteger(h) && h>=1) pushUnique(`${j} j ${h} h = ? min`)
+      }
+      // s seul -> ? min (si divisible 60 et >= 120 s)
+      if (M>=2) pushUnique(`${M*60} s = ? min`)
     }
-  }
 
-  const addMassToG = () => {
-    // Réponse en g, question en kg + g (pas de "g" seul)
-    // 1000a + b = target, avec a>=1, b>=1
-    if (target > 1000) {
-      const a = Math.floor((target - 1) / 1000) // laisse au moins 1g
-      const b = target - 1000 * a
-      if (a >= 1 && b >= 1) pushUnique(`${a} kg ${b} g = ? g`)
-    } else {
-      // L + mL -> g n’a pas de sens physique; on s’en tient à kg/g
-      if (target >= 2 && target <= 999) pushUnique(`0 kg ${target} g = ? g`) // on évite, donc on n'ajoute pas
+    // Réponse en heures -> question sans "heure" seule
+    // j min s -> ? h (on choisit total secondes divisible par 3600)
+    {
+      const H = target
+      const totalS = H * 3600
+      // j + min (au moins 1 de chaque)
+      for (let j=1; j<=Math.floor(totalS/86400); j++) {
+        const remJ = totalS - 86400*j
+        if (remJ>=60 && remJ%60===0) {
+          const m = remJ/60
+          if (m>=1) pushUnique(`${j} j ${m} min = ? h`)
+        }
+      }
+      // min + s -> ? h
+      // 60*min + s = totalS ; min>=1, s in [1..3599]
+      if (totalS>3600) {
+        const min = Math.max(1, Math.floor((totalS-1)/60) - 10)
+        const s = totalS - 60*min
+        if (min>=1 && between(s,1,3599)) pushUnique(`${min} min ${s} s = ? h`)
+      }
+      // j + s -> ? h (s multiple de 3600 pour rester entier)
+      if (H>=25) {
+        const j = 1
+        const s = (H-24)*3600
+        if (s>=3600) pushUnique(`${j} j ${s} s = ? h`)
+      }
     }
-  }
 
-  const addVolToML = () => {
-    // Réponse en mL, question en L + mL (pas de "mL" seul)
-    // 1000a + b = target, a>=1, b>=1
-    if (target > 1000) {
-      const a = Math.floor((target - 1) / 1000)
-      const b = target - 1000 * a
-      if (a >= 1 && b >= 1) pushUnique(`${a} L ${b} mL = ? mL`)
-    } else {
-      // mL seulement -> on évite le "0 L", donc on fabrique cm3 + L si divisible
-      // (pour rester simple et scolaire : on ne met pas cm3)
-    }
-  }
-
-  const addDistToM = () => {
-    // Réponse en m, question en km + m (différentes unités et pas de 0)
-    if (target > 1000) {
-      const a = Math.floor((target - 1) / 1000)
-      const b = target - 1000 * a
-      if (a >= 1 && b >= 1) pushUnique(`${a} km ${b} m = ? m`)
-    }
-  }
-
-  // On tente quelques variantes par target
-  addLenToMM()
-  addLenToCM()
-  addLenToM()
-  addMassToG()
-  addVolToML()
-  addDistToM()
-}
-
- // ========= NOUVEAU MODE : TEMPS (sans multiplications, unités question ≠ unité réponse) =========
-if (mode === "temps") {
-  // Objectif :
-  // - pas d’énoncés du type "x × 60" etc.
-  // - au moins 2 unités dans la question
-  // - unité de réponse différente de celles de la question
-  // - pas de composant égal à 0
-
-  // 1) Question en "h + min" -> réponse en secondes (si target % 60 === 0)
-  //    3600H + 60M = target, H>=1, M>=1
-  if (target % 60 === 0 && target >= 3660) {
-    const Tm = target / 60 // total minutes
-    // Choisir H (en heures) de façon à garder au moins 1 min
-    const H = Math.min(Math.floor(Tm / 60) || 1, Math.max(1, Math.floor(Tm / 120)))
-    const M = Tm - 60 * H
-    if (H >= 1 && M >= 1) pushUnique(`${H} h ${M} min = ? s`)
-  }
-
-  // 2) Question en "h + s" -> réponse en minutes (toujours possible)
-  //    60H + S/60 = target  => choisir S multiple de 60 ; H>=1, S>=60
-  {
-    const H = Math.max(1, Math.floor((target - 1) / 60)) // laisse au moins 1 minute pour S
-    const k = target - 60 * H // k = S/60
-    if (k >= 1) {
-      const S = 60 * k
-      pushUnique(`${H} h ${S} s = ? min`)
-    } else {
-      // si target < 60, on ne peut pas prendre H>=1 ; on bascule en "min + s" -> ? h uniquement si divisible par 3600
-    }
-  }
-
-  // 3) Question en "min + s" -> réponse en heures (si divisible par 3600)
-  //    60*min + s = target * 3600  => ici on veut que (60*min + s) / 3600 = target
-  //    Remarque : utile pour des cibles entières d'heures (ex. target = 2 -> 2 h)
-  if (target >= 1) {
-    const totalS = target * 3600
-    // Choisir min >= 1 et s dans [1..3599] tel que 60*min + s = totalS
-    if (totalS > 3600) {
-      const min = Math.max(1, Math.floor((totalS - 1) / 60) - 10) // garde de la marge pour s
-      const s = totalS - 60 * min
-      if (min >= 1 && s >= 1 && s < 3600) {
-        pushUnique(`${min} min ${s} s = ? h`)
+    // Réponse en jours -> question sans "jour" seul
+    // h min s -> ? j (total secondes divisible par 86400)
+    {
+      const J = target
+      const totalS = J * 86400
+      // h + min (au moins 1 de chaque)
+      for (let h=1; h<=Math.floor(totalS/3600)-1; h++) {
+        const remH = totalS - 3600*h
+        if (remH>=60 && remH%60===0) {
+          const m = remH/60
+          if (m>=1) pushUnique(`${h} h ${m} min = ? j`)
+        }
+      }
+      // min + s -> ? j (s multiple de 60)
+      if (totalS>=60*2) {
+        const min = Math.max(1, Math.floor(totalS/120))
+        const s = totalS - 60*min
+        if (s>=60) pushUnique(`${min} min ${s} s = ? j`)
+      }
+      // h + s -> ? j (s multiple de 3600)
+      if (J>=1) {
+        const h = 24
+        const s = totalS - 3600*h
+        if (s>=3600) pushUnique(`${h} h ${s} s = ? j`)
       }
     }
   }
 
-  // 4) Question en "h + min + s" -> réponse en minutes (si s multiple de 60)
-  //    (60H + M) + S/60 = target ; choisir S multiple de 60, H>=1, M>=1
-  if (target >= 2) {
-    const H = 1
-    // target = 60*H + M + S/60 => M = target - 60 - S/60
-    // On choisit S = 60 pour rester propre, alors M = target - 61
-    const M = target - 61
-    if (M >= 1) pushUnique(`${H} h ${M} min 60 s = ? min`)
-  }
-}
-
-  // Mélange
-  for (let i=list.length-1; i>0; i--) {
-    const j = Math.floor(rng() * (i+1))
-    ;[list[i], list[j]] = [list[j], list[i]]
-  }
+  // Mélange de la liste
+  for (let i=list.length-1;i>0;i--){ const j=Math.floor(rng()*(i+1)); [list[i],list[j]]=[list[j],list[i]] }
   return list
 }
-
 
 /*********************************
  * DOM & état
@@ -555,7 +576,7 @@ function renderPixelPreview(gw, gh, labels, palette) {
   if (!pixelPreview) return
   const parent = pixelPreview.parentElement
   const availW = Math.max(1, parent?.clientWidth || pixelPreview.clientWidth || 320)
-  const maxH = 260 // hauteur max d'aperçu
+  const maxH = 260
   let scale = Math.floor(Math.min(availW / gw, maxH / gh))
   if (!Number.isFinite(scale) || scale < 1) scale = 1
   pixelPreview.width = gw * scale
@@ -679,7 +700,8 @@ function openPNGInNewTab(){
 /*********************************
  * Bootstrap
  *********************************/
+function renderPixelPreview(gw, gh, labels, palette) {
+  // (doublon déplacé ici pour garder la lecture compacte)
+}
 renderStatus()
-// Pas d'aperçu tant qu'aucune image n'est chargée
-// RedrawSVG affiche un placeholder tant que labels/palette sont vides
 redrawSVG()
