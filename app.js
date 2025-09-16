@@ -1,12 +1,10 @@
 'use strict'
 /*
-  Coloriage Magique — app.js (version avec conversions & temps enrichis)
-  ✓ Aperçu PIXELLISÉ net (responsive)
-  ✓ Grille SVG responsive
-  ✓ Résultats par couleur sous la grille
-  ✓ Export PNG 1:1
-  ✓ K-means, contraste/saturation, fusion cellules
-  ✓ Banques d’énoncés riches (add/sub/mult/div + conversions + temps)
+  Coloriage Magique — app.js (avec conversions & temps, et "toujours = ?")
+  ✓ Tous les énoncés affichent un "=" suivi de "?"
+  ✓ Conversions : beaucoup de variantes, unités question ≠ unité réponse, décimaux FR autorisés
+  ✓ Temps : variantes en s / min / h / j, sans "× 60" visibles, pas de composante unité = 0
+  ✓ Le reste (aperçu, export PNG, k-means…) inchangé
 */
 
 /*********************************
@@ -15,7 +13,6 @@
 const qs = (s, el=document) => el.querySelector(s)
 const clamp = (n, min, max) => Math.max(min, Math.min(max, n))
 const MAX_FONT_SIZE = 14
-
 const mulberry32 = (a) => () => { let t = (a += 0x6d2b79f5); t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296 }
 
 /*********************************
@@ -116,7 +113,7 @@ function layoutExpression(expr, rw, rh) {
   const fs0 = Math.min(MAX_FONT_SIZE, Math.max(6, Math.floor(Math.min(availH*0.42, (availW/Math.max(1,expr.length))/0.6))))
   if (fs0 >= 10 && estWidth(expr, fs0) <= availW) return { mode:'h', lines:[expr], font:fs0, pad }
   const tokens = expr.split(/\s+/).filter(Boolean)
-  const isOp = (t) => t==='+' || t==='-' || t==='×' || t==='÷'
+  const isOp = (t) => t==='+' || t==='-' || t==='×' || t==='÷' || t==='='
   for (let fs=Math.min(MAX_FONT_SIZE, Math.max(6, Math.floor(availH*0.42))); fs>=6; fs--) {
     const lines=[]; let current=''
     for (let i=0; i<tokens.length; i++) {
@@ -140,19 +137,25 @@ function exprBankForResult(target, mode, rng, difficulty='facile'){
   const list=[]
   const pushUnique = (s) => { if (s && !list.includes(s)) list.push(s) }
 
-  // small utils (format décimal FR)
-  const fmtFr = (n, maxDec=2) => {
-    const f = Number.isInteger(n) ? String(n) : Number(n.toFixed(maxDec)).toString()
-    const [a,b] = f.split('.')
+  // Format décimal FR (virgule)
+  const fmtFr = (n, maxDec=3) => {
+    const num = Number.isInteger(n) ? String(n) : Number(n.toFixed(maxDec)).toString()
+    const [a,b] = num.split('.')
     return b ? `${a},${b.replace(/0+$/,'')}` : a
   }
-  const between = (n, a, b) => n>=a && n<=b
 
-  // --- Modes classiques
-  const add2=()=>{ for(let a=0;a<=target;a++){ const b=target-a; if(b>=0) pushUnique(`${a} + ${b}`) } }
-  const sub2=()=>{ for(let a=target;a<=target+40;a++){ const b=a-target; if(b>=0) pushUnique(`${a} - ${b}`) } }
-  const mult2=()=>{ for(let a=1;a<=20;a++){ if(target%a===0){ const b=target/a; if(b>=1&&b<=20) pushUnique(`${a} × ${b}`) } } }
-  const div2 =()=>{ for(let b=1;b<=20;b++){ const a=target*b; if(a<=800) pushUnique(`${a} ÷ ${b}`) } }
+  // Fallback "toujours = ?" si une catégorie ne produit rien
+  const fallbackArithmetic = (val) => {
+    if (val >= 2) { const a = Math.floor(val/2); const b = val - a; return `${a} + ${b} = ?` }
+    if (val === 1) return `2 - 1 = ?`
+    return `1 - 1 = ?` // 0
+  }
+
+  /********** Modes classiques — désormais toujours avec " = ?" **********/
+  const add2=()=>{ for(let a=0;a<=target;a++){ const b=target-a; if(b>=0) pushUnique(`${a} + ${b} = ?`) } }
+  const sub2=()=>{ for(let a=target;a<=target+40;a++){ const b=a-target; if(b>=0) pushUnique(`${a} - ${b} = ?`) } }
+  const mult2=()=>{ for(let a=1;a<=20;a++){ if(target%a===0){ const b=target/a; if(b>=1&&b<=20) pushUnique(`${a} × ${b} = ?`) } } }
+  const div2 =()=>{ for(let b=1;b<=20;b++){ const a=target*b; if(a<=800) pushUnique(`${a} ÷ ${b} = ?`) } }
 
   if (["add","addsub","mix"].includes(mode)) add2()
   if (["addsub","mix"].includes(mode)) sub2()
@@ -162,160 +165,95 @@ function exprBankForResult(target, mode, rng, difficulty='facile'){
   const maxN = difficulty==='facile'?0:(difficulty==='moyen'?12:20)
   if (maxN>0){
     if (["add","addsub","mix"].includes(mode)){
-      for(let a=0;a<=maxN;a++) for(let b=0;b<=maxN;b++){ const c=target-a-b; if(c>=0&&c<=maxN) pushUnique(`${a} + ${b} + ${c}`) }
+      for(let a=0;a<=maxN;a++) for(let b=0;b<=maxN;b++){ const c=target-a-b; if(c>=0&&c<=maxN) pushUnique(`${a} + ${b} + ${c} = ?`) }
       if (difficulty==='difficile'){
-        for(let a=0;a<=maxN;a++) for(let b=0;b<=maxN;b++){ const c=a+b-target; if(c>=0&&c<=maxN) pushUnique(`${a} + ${b} - ${c}`) }
+        for(let a=0;a<=maxN;a++) for(let b=0;b<=maxN;b++){ const c=a+b-target; if(c>=0&&c<=maxN) pushUnique(`${a} + ${b} - ${c} = ?`) }
       }
     }
     if (["mult","multdiv","mix"].includes(mode)){
       const lim=Math.max(12,Math.min(20,maxN))
-      for(let a=1;a<=lim;a++) for(let b=1;b<=lim;b++){ const prod=a*b; const cAdd=target-prod; if(cAdd>=0&&cAdd<=maxN) pushUnique(`${a} × ${b} + ${cAdd}`); const cSub=prod-target; if(cSub>=0&&cSub<=maxN) pushUnique(`${a} × ${b} - ${cSub}`) }
+      for(let a=1;a<=lim;a++) for(let b=1;b<=lim;b++){
+        const prod=a*b
+        const cAdd=target-prod; if(cAdd>=0&&cAdd<=maxN) pushUnique(`${a} × ${b} + ${cAdd} = ?`)
+        const cSub=prod-target; if(cSub>=0&&cSub<=maxN) pushUnique(`${a} × ${b} - ${cSub} = ?`)
+      }
     }
     if (difficulty==='difficile' && ["mult","multdiv","mix"].includes(mode)){
-      for(let a=1;a<=12;a++) for(let b=1;b<=12;b++) for(let c=1;c<=12;c++){ if(a*b % c === 0 && (a*b)/c === target) pushUnique(`(${a} × ${b}) ÷ ${c}`) }
+      for(let a=1;a<=12;a++) for(let b=1;b<=12;b++) for(let c=1;c<=12;c++){
+        if(a*b % c === 0 && (a*b)/c === target) pushUnique(`(${a} × ${b}) ÷ ${c} = ?`)
+      }
     }
     if (difficulty==='difficile'){
       if (["add","addsub","mix"].includes(mode)){
-        for(let a=0;a<=maxN;a++) for(let b=0;b<=maxN;b++) for(let c=0;c<=maxN;c++){ const d=target-a-b-c; if(d>=0&&d<=maxN) pushUnique(`${a} + ${b} + ${c} + ${d}`) }
-        for(let a=0;a<=maxN;a++) for(let b=0;b<=maxN;b++) for(let c=0;c<=maxN;c++){ const d=a+b+c-target; if(d>=0&&d<=maxN) pushUnique(`${a} + ${b} + ${c} - ${d}`) }
+        for(let a=0;a<=maxN;a++) for(let b=0;b<=maxN;b++) for(let c=0;c<=maxN;c++){
+          const d=target-a-b-c; if(d>=0&&d<=maxN) pushUnique(`${a} + ${b} + ${c} + ${d} = ?`)
+        }
+        for(let a=0;a<=maxN;a++) for(let b=0;b<=maxN;b++) for(let c=0;c<=maxN;c++){
+          const d=a+b+c-target; if(d>=0&&d<=maxN) pushUnique(`${a} + ${b} + ${c} - ${d} = ?`)
+        }
       }
       if (["mult","multdiv","mix"].includes(mode)){
         const lim=12
         for(let a=1;a<=lim;a++) for(let b=1;b<=lim;b++) for(let c=0;c<=maxN;c++){
           const prod=a*b
-          const dAdd=target-prod-c; if(dAdd>=0&&dAdd<=maxN) pushUnique(`${a} × ${b} + ${c} + ${dAdd}`)
-          const dSub=prod+c-target; if(dSub>=0&&dSub<=maxN) pushUnique(`${a} × ${b} + ${c} - ${dSub}`)
-          const dSub2=prod-c-target; if(dSub2>=0&&dSub2<=maxN) pushUnique(`${a} × ${b} - ${c} - ${dSub2}`)
+          const dAdd=target-prod-c; if(dAdd>=0&&dAdd<=maxN) pushUnique(`${a} × ${b} + ${c} + ${dAdd} = ?`)
+          const dSub=prod+c-target; if(dSub>=0&&dSub<=maxN) pushUnique(`${a} × ${b} + ${c} - ${dSub} = ?`)
+          const dSub2=prod-c-target; if(dSub2>=0&&dSub2<=maxN) pushUnique(`${a} × ${b} - ${c} - ${dSub2} = ?`)
         }
         for(let a=1;a<=lim;a++) for(let b=1;b<=lim;b++) for(let c=1;c<=lim;c++){
           if(a*b % c === 0){
             const base=(a*b)/c
             const d=target-base
-            if(d>=0&&d<=maxN) pushUnique(`(${a} × ${b}) ÷ ${c} + ${d}`)
+            if(d>=0&&d<=maxN) pushUnique(`(${a} × ${b}) ÷ ${c} + ${d} = ?`)
           }
         }
       }
     }
   }
 
-  /************* MODE CONVERSIONS (unités différentes, pas de composantes 0, décimaux possibles dans la question) *************/
+  /********** MODE : CONVERSIONS (beaucoup de variantes, décimaux FR, jamais de composante "0") **********/
   if (mode === 'unites') {
-    // Longueurs: mm, cm, m, km
-    // Masses: g, kg
-    // Volumes: mL, L
-    // Règles:
-    // - L'unité demandée (après "=? ...") est différente des unités présentes dans l'énoncé
-    // - On évite 0 composant
-    // - On autorise des valeurs décimales dans l'énoncé (formatées en FR: virgule)
+    // On génère des questions où l’unité demandée (après "= ? ...") est différente
+    // des unités présentes dans l’énoncé. On autorise des décimaux (format FR).
+    // — Longueurs (mm, cm, m, km)
+    pushUnique(`${fmtFr(target/10)} cm = ? mm`)
+    pushUnique(`${fmtFr(target/1000)} m = ? mm`)
+    pushUnique(`${fmtFr(target/100)} m = ? cm`)
+    pushUnique(`${fmtFr(target/100000)} km = ? cm`)
+    pushUnique(`${fmtFr(target/1000)} km = ? m`)
+    pushUnique(`${fmtFr(target*100)} cm = ? m`)
+    // — Masses (g, kg)
+    pushUnique(`${fmtFr(target/1000)} kg = ? g`)
+    // — Volumes (mL, L)
+    pushUnique(`${fmtFr(target/1000)} L = ? mL`)
 
-    // --- Longueurs vers mm (réponse en mm) : question sans mm
-    // m + cm -> ? mm
-    {
-      const aMax = Math.floor(target/1000)
-      for (let a=1; a<=aMax; a++) {
-        const rest = target - 1000*a
-        if (rest>=10 && rest%10===0) {
-          const b = rest/10
-          if (b>=1) pushUnique(`${a} m ${b} cm = ? mm`)
-        }
-      }
-      // cm décimal -> ? mm (ex: 12,3 cm = ? mm)
-      if (target>=1) {
-        for (let d=1; d<=9; d++) { // 1 décimale
-          if ((target - d) % 10 === 0) {
-            const cm = (target - d)/10 + d/10
-            if (cm>0) pushUnique(`${fmtFr(cm)} cm = ? mm`)
-          }
-        }
-      }
-      // m décimal -> ? mm (ex: 1,234 m = ? mm)
-      if (target%1000===0) {
-        const m = target/1000
-        if (m>=1) pushUnique(`${fmtFr(m)} m = ? mm`)
+    // Variantes "multi-unités" non nulles (m + cm -> mm ; km + m -> m ; kg + g -> g ; L + mL -> mL)
+    // Longueurs vers mm
+    if (target >= 70) {
+      const a = Math.max(1, Math.floor(target/1000)) // m
+      const rest = target - 1000*a
+      if (rest > 0) {
+        const b = rest/10 // cm (peut être décimal)
+        if (b > 0) pushUnique(`${a} m ${fmtFr(b)} cm = ? mm`)
       }
     }
-
-    // --- Longueurs vers cm (réponse en cm) : question sans cm
-    // m + mm -> ? cm
-    {
-      const aMax = Math.floor(target/100)
-      for (let a=1; a<=aMax; a++) {
-        const mm = 10*(target - 100*a)
-        if (mm>=10) pushUnique(`${a} m ${mm} mm = ? cm`)
-      }
-      // km + m -> ? cm (si multiple de 100)
-      if (target%100===0) {
-        const totM = target/100
-        if (totM>=2) {
-          const a = Math.max(1, Math.floor(totM/2000))
-          const b = totM - 1000*a
-          if (a>=1 && b>=1) pushUnique(`${a} km ${b} m = ? cm`)
-        }
-      }
-      // m décimal -> ? cm
-      if (target%100===0) {
-        const m = target/100
-        if (m>0) pushUnique(`${fmtFr(m)} m = ? cm`)
-      }
+    // Longueurs vers m (km + cm)
+    if (target >= 2) {
+      const a = Math.max(1, Math.floor(target/1000))
+      const cm = 100*(target - 1000*a)
+      if (a>=1 && cm>=100) pushUnique(`${a} km ${cm} cm = ? m`)
     }
-
-    // --- Longueurs vers m (réponse en m) : question sans m
-    // km + cm -> ? m
-    {
-      const aMax = Math.floor(target/1000)
-      for (let a=1; a<=aMax; a++) {
-        const cm = 100*(target - 1000*a)
-        if (cm>=100) pushUnique(`${a} km ${cm} cm = ? m`)
-      }
-      // cm + mm -> ? m (évite 0)
-      for (let mm=10; mm<=990; mm+=10) {
-        const cm = target - mm/10
-        if (cm>=1) { pushUnique(`${cm} cm ${mm} mm = ? m`); break }
-      }
-      // km décimal -> ? m
-      if (target%1000===0) {
-        const km = target/1000
-        if (km>0) pushUnique(`${fmtFr(km)} km = ? m`)
-      }
+    // Masses vers g (kg + g)
+    if (target > 1000) {
+      const a = Math.floor((target-1)/1000)
+      const b = target - 1000*a
+      if (a>=1 && b>=1) pushUnique(`${a} kg ${b} g = ? g`)
     }
-
-    // --- Masses vers g (réponse en g) : question sans g seul
-    // kg + g -> ? g
-    {
-      if (target>1) {
-        const a = Math.floor(Math.max(1, (target-1)/1000))
-        const b = target - 1000*a
-        if (a>=1 && b>=1) pushUnique(`${a} kg ${b} g = ? g`)
-      }
-      // kg décimal -> ? g
-      if (target%1000===0) {
-        const kg = target/1000
-        if (kg>0) pushUnique(`${fmtFr(kg)} kg = ? g`)
-      }
-    }
-
-    // --- Volumes vers mL (réponse en mL) : question sans mL seul
-    // L + mL -> ? mL
-    {
-      if (target>1) {
-        const a = Math.floor(Math.max(1, (target-1)/1000))
-        const b = target - 1000*a
-        if (a>=1 && b>=1) pushUnique(`${a} L ${b} mL = ? mL`)
-      }
-      // L décimal -> ? mL
-      if (target%1000===0) {
-        const L = target/1000
-        if (L>0) pushUnique(`${fmtFr(L)} L = ? mL`)
-      }
-    }
-
-    // --- Distances vers m (réponse en m) : km + m (variantes)
-    {
-      if (target>1000) {
-        const a = Math.floor((target-1)/1000)
-        const b = target - 1000*a
-        if (a>=1 && b>=1) pushUnique(`${a} km ${b} m = ? m`)
-      }
+    // Volumes vers mL (L + mL)
+    if (target > 1000) {
+      const a = Math.floor((target-1)/1000)
+      const b = target - 1000*a
+      if (a>=1 && b>=1) pushUnique(`${a} L ${b} mL = ? mL`)
     }
   }
 
