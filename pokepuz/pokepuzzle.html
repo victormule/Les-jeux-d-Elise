@@ -3,17 +3,24 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>PokéMath Puzzle</title>
+  <title>Puzzle Pokemon</title>
+  <link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&display=swap" rel="stylesheet">
+
   <link rel="stylesheet" href="pokepuzzle.css" />
   <script defer src="pokepuzzle.js"></script>
 </head>
 <body>
-<a href="index.html" class="back-link">← Page précédente</a>
+  <a href="index.html" class="back-link">← Page précédente</a>
 
   <!-- ÉCRAN TITRE -->
   <section id="titleScreen" class="title-screen">
+    <!-- Logo + Titre au-dessus du bloc -->
+    <div class="brand">
+      <img src="pokelogo.png" alt="Logo Professeur Elise dresseuse" class="brand-logo" />
+      <h1 class="app-title">Puzzle Pokemon</h1>
+    </div>
+
     <div class="card">
-      <h1 class="app-title">PokéMath Puzzle</h1>
       <p class="subtitle">Résous les calculs pour révéler le Pokémon et le capturer !</p>
 
       <form id="titleForm" class="title-form">
@@ -50,9 +57,14 @@
   <!-- HUD EN JEU -->
   <header id="hud" class="header hidden">
     <div class="stats">
+      <!-- Logo + titre aussi dans la page du jeu -->
+      <div class="brand-inline">
+        <img src="pokelogo.png" alt="" class="brand-logo-sm" />
+        <span class="app-title">Puzzle Pokemon</span>
+      </div>
+
       <span class="badge" id="playerBadge">Joueur : ?</span>
       <span class="badge" id="opBadge">Opération : +</span>
-      <!-- Compteur pièces supprimé de l’affichage -->
       <span class="badge" id="timer">00:00</span>
       <span class="badge error" id="errorsBadge">Erreurs : 0/3</span>
     </div>
@@ -79,6 +91,9 @@
         <h4>Équipe</h4>
         <div id="collectionGrid" class="collection-grid"></div>
         <div class="collection-tip">Capture 6 Pokémon pour gagner !</div>
+        <div class="collection-actions">
+          <button id="openDiploma" class="btn btn-secondary btn-sm">Voir le diplôme</button>
+        </div>
       </div>
     </section>
 
@@ -118,4 +133,3 @@
   <canvas id="workCanvas" hidden></canvas>
 </body>
 </html>
-
