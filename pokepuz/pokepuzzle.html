@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PokéMath Puzzle</title>
+  <link rel="stylesheet" href="pokepuzzle.css" />
+  <script defer src="pokepuzzle.js"></script>
+</head>
+<body>
+<a href="index.html" class="back-link">← Page précédente</a>
+
+  <!-- ÉCRAN TITRE -->
+  <section id="titleScreen" class="title-screen">
+    <div class="card">
+      <h1 class="app-title">PokéMath Puzzle</h1>
+      <p class="subtitle">Résous les calculs pour révéler le Pokémon et le capturer !</p>
+
+      <form id="titleForm" class="title-form">
+        <label class="field">
+          <span>Prénom</span>
+          <input required id="playerName" type="text" minlength="2" placeholder="ex. Sacha" />
+        </label>
+
+        <label class="field">
+          <span>Opération</span>
+          <select id="op">
+            <option value="+">Addition</option>
+            <option value="-">Soustraction</option>
+            <option value="×">Multiplication</option>
+            <option value="÷">Division</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Nombre de cases</span>
+          <input id="pieces" type="number" min="9" max="100" value="16" step="1" />
+        </label>
+
+        <button id="start" class="btn btn-primary" type="submit">Start</button>
+      </form>
+
+      <p class="hint">
+        Un Pokémon aléatoire (1G) sera choisi automatiquement depuis le dossier
+        <code>/1G</code> (fichiers <code>1.png</code> à <code>151.png</code>).
+      </p>
+    </div>
+  </section>
+
+  <!-- HUD EN JEU -->
+  <header id="hud" class="header hidden">
+    <div class="stats">
+      <span class="badge" id="playerBadge">Joueur : ?</span>
+      <span class="badge" id="opBadge">Opération : +</span>
+      <!-- Compteur pièces supprimé de l’affichage -->
+      <span class="badge" id="timer">00:00</span>
+      <span class="badge error" id="errorsBadge">Erreurs : 0/3</span>
+    </div>
+    <div class="actions">
+      <button id="flee" class="btn btn-secondary">Fuir le combat</button>
+      <button id="quit" class="btn btn-ghost">Quitter</button>
+    </div>
+  </header>
+
+  <!-- LAYOUT DU PUZZLE -->
+  <main id="gameLayout" class="layout hidden">
+    <section class="tray" id="trayLeft" aria-label="Pièces à gauche">
+      <h3 class="tray-title">Pièces</h3>
+    </section>
+
+    <section class="center" id="center">
+      <div id="grid" class="grid" aria-live="polite">
+        <div id="dropHint" class="drop-hint">Faites glisser les pièces ici</div>
+        <!-- cellules générées en JS -->
+      </div>
+
+      <!-- ÉQUIPE collée sous la grille (même largeur) -->
+      <div class="collection">
+        <h4>Équipe</h4>
+        <div id="collectionGrid" class="collection-grid"></div>
+        <div class="collection-tip">Capture 6 Pokémon pour gagner !</div>
+      </div>
+    </section>
+
+    <section class="tray" id="trayRight" aria-label="Pièces à droite">
+      <h3 class="tray-title">Pièces</h3>
+    </section>
+  </main>
+
+  <!-- TOAST NOTIFS -->
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <!-- MODALE FIN DE PARTIE -->
+  <div id="gameOver" class="modal hidden" aria-modal="true" role="dialog">
+    <div class="modal-card">
+      <h2>Bravo ! Équipe complète 🎉</h2>
+      <p id="summary"></p>
+      <div class="modal-actions">
+        <button id="printDiploma" class="btn btn-primary">Imprimer le diplôme</button>
+        <button id="again" class="btn btn-secondary">Rejouer</button>
+        <button id="closeModal" class="btn btn-ghost">Fermer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECTION DIPLÔME (impression) -->
+  <section id="diploma" class="diploma hidden">
+    <div class="diploma-card">
+      <h1>Diplôme de Dresseur</h1>
+      <p class="d-line"><strong>Prénom :</strong> <span id="dPlayer"></span></p>
+      <p class="d-line"><strong>Ligue :</strong> <span id="dLeague"></span></p>
+      <div id="dTeam" class="d-team"></div>
+      <p class="d-foot">Félicitations pour avoir complété ton équipe !</p>
+    </div>
+  </section>
+
+  <!-- Canvas de travail -->
+  <canvas id="workCanvas" hidden></canvas>
+</body>
+</html>
+
