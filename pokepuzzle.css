@@ -341,6 +341,36 @@ body {
   font-style: italic;
 }
 
+/* 1) enlève le fond image éventuel sur .diploma */
+.diploma { 
+  background: #fff;                 /* simple */
+  -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+}
+
+/* 2) fond image derrière le contenu de la carte */
+.diploma-card {
+  position: relative;
+  background: transparent;          /* ne pas couvrir l'image */
+}
+.diploma-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: url("pokemondiplome.jpg") center/cover no-repeat;  /* <- .jpg */
+  z-index: 0;                       /* derrière le contenu */
+}
+/* et s'assurer que le contenu passe bien devant */
+.diploma-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.d-team img {
+  opacity: 0.85;         /* léger voile */
+}
+
 /* Impression : n'afficher QUE le diplôme */
 @media print {
   body * { visibility: hidden !important; }
@@ -355,3 +385,6 @@ body {
   .collection-grid { grid-template-columns: repeat(3, minmax(60px,1fr)); }
   .d-team { grid-template-columns: repeat(3, 1fr); }
 }
+
+.collection-actions { margin-top: 6px; }
+.btn-sm { padding: 6px 10px; font-size: 12px; border-radius: 8px; }
