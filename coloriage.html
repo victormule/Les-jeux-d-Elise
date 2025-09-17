@@ -8,7 +8,7 @@
   -->
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="Génère une grille de coloriage magique à partir d'une image : k-means couleurs, opérations mathématiques, export PNG — fonctionne hors-ligne." />
+  <meta name="description" content="Génère une grille de coloriage magique à partir d'une image de votre choix" />
   <title>Coloriage Magique – Offline</title>
   <link rel="icon" href="favicon.png" />
   <link rel="stylesheet" href="style.css" />
@@ -23,8 +23,8 @@
   <!-- En-tête -->
   <header class="container" role="banner">
     <a class="back" href="index.html">← Retour aux jeux</a>
-    <h1>Coloriage magique à partir d'une image</h1>
-    <p class="muted">Charge une image locale, ajuste contraste/saturation, choisis les opérations et la difficulté. Tu peux aussi modifier le résultat associé à chaque couleur (nombres grands possibles).</p>
+    <h1>Coloriage magique</h1>
+    <p class="muted">Charge une image locale, ajuste contraste/saturation, choisis les opérations et la difficulté. Tu peux aussi modifier le résultat associé à chaque couleur.</p>
   </header>
 
   <!-- Contenu principal -->
@@ -147,6 +147,6 @@
   <canvas id="preview" class="hidden" aria-hidden="true"></canvas>
 
   <!-- Script applicatif local -->
-  <script src="app.js" type="module" defer></script>
+  <script src="coloriage.js" type="module" defer></script>
 </body>
 </html>
