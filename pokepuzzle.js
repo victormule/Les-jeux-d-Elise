@@ -8,8 +8,6 @@ const piecesInput = document.getElementById('pieces');
 const hud         = document.getElementById('hud');
 const playerBadge = document.getElementById('playerBadge');
 const opBadge     = document.getElementById('opBadge');
-// Compteur pièces retiré visuellement, on ne l'affiche plus :
-const piecesCount = null;
 const timerEl     = document.getElementById('timer');
 const errorsBadge = document.getElementById('errorsBadge');
 
@@ -35,6 +33,8 @@ const diploma     = document.getElementById('diploma');
 const dPlayer     = document.getElementById('dPlayer');
 const dLeague     = document.getElementById('dLeague');
 const dTeam       = document.getElementById('dTeam');
+
+const openDiplomaBtn = document.getElementById('openDiploma');
 
 const workCanvas  = document.getElementById('workCanvas');
 
@@ -308,7 +308,7 @@ function buildGridAndPieces(img, rows, cols, calcs) {
     state.mapping.push({ idx, result: eq.res });
   }
 
-  // Pièces SANS image (juste la valeur)
+  // Pièces SANS image Pokémon (seulement le nombre), fond pokéball via CSS
   const answers = calcs.map(c => c.res);
   const order = shuffle([...answers]);
 
@@ -325,12 +325,14 @@ function buildGridAndPieces(img, rows, cols, calcs) {
     makePieceDraggable(piece);
     (i % 2 === 0 ? trayLeft : trayRight).appendChild(piece);
   });
+
+  // Masquer l’indication "déposez ici" une fois la grille prête
+  dropHint.classList.add('hidden');
 }
 
 async function startRound() {
   state.active = false;
   clearUI();
-  dropHint.classList.remove('hidden');
   state.round += 1;
 
   state.errors = 0;
@@ -460,7 +462,9 @@ titleForm.addEventListener('submit', (e) => {
   startRound();
 });
 
-fleeBtn.addEventListener('click', () => onPokemonEscaped(true));
+if (fleeBtn) {
+  fleeBtn.addEventListener('click', () => onPokemonEscaped(true));
+}
 
 quitBtn.addEventListener('click', () => {
   clearInterval(state.timerInterval);
@@ -489,6 +493,24 @@ againBtn.addEventListener('click', () => {
 });
 closeModal.addEventListener('click', () => gameOver.classList.add('hidden'));
 printDiplomaBtn.addEventListener('click', () => printDiploma());
+
+// Bouton “Voir le diplôme” (aperçu à tout moment)
+if (openDiplomaBtn) {
+  openDiplomaBtn.addEventListener('click', () => {
+    fillDiploma();
+    diploma.classList.remove('hidden');
+  });
+}
+// fermer le diplôme en cliquant en dehors de la carte
+diploma.addEventListener('click', (e) => {
+  if (e.target === diploma) diploma.classList.add('hidden');
+});
+// fermer avec Echap
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !diploma.classList.contains('hidden')) {
+    diploma.classList.add('hidden');
+  }
+});
 
 // Ajustements responsive
 window.addEventListener('resize', fitGridToViewport);
