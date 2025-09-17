@@ -8,23 +8,7 @@
   <script defer src="pokepuzzle.js"></script>
 </head>
 <body>
-  .back-link{
-  display:inline-block;
-  margin:12px;
-  padding:6px 10px;
-  border:1px solid rgba(255,255,255,0.2);
-  border-radius:8px;
-  color:#cbd5e1;
-  text-decoration:none;
-}
-.back-link:hover{ color:#fff; border-color:#fff; }
-
-/* option: le rendre toujours visible en haut-gauche */
-/* .back-link{ position:fixed; top:10px; left:10px; z-index:100; } */
-
-@media print{
-  .back-link{ display:none !important; }
-}
+<a href="index.html" class="back-link">← Page précédente</a>
 
   <!-- ÉCRAN TITRE -->
   <section id="titleScreen" class="title-screen">
@@ -134,4 +118,5 @@
   <canvas id="workCanvas" hidden></canvas>
 </body>
 </html>
+
 
