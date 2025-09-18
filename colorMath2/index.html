@@ -1,0 +1,129 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Génère une grille de coloriage magique à partir d'une image et permet d'éditer manuellement les cellules par couleur." />
+  <title>Coloriage magique – Simple</title>
+
+  <!-- Chemins RELATIFS : style.css doit être à côté de index.html -->
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <noscript>
+    <div style="padding:12px;background:#fee2e2;color:#7f1d1d;font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif">
+      Cette application nécessite JavaScript pour fonctionner.
+    </div>
+  </noscript>
+
+  <header class="container" role="banner">
+    <h1>Coloriage magique (simple)</h1>
+    <p class="muted">Importe une image, la pixelise et édite manuellement les cellules pour créer tes exercices.</p>
+  </header>
+
+  <main class="container grid" role="main">
+    <!-- Colonne gauche : contrôles -->
+    <section class="card" aria-labelledby="controls-title">
+      <h2 id="controls-title" class="visually-hidden">Contrôles</h2>
+
+      <!-- Sélecteur d'image -->
+      <div class="field">
+        <label for="fileInput">Image (PNG, JPEG, WEBP, GIF, BMP)</label>
+        <input id="fileInput" name="fileInput" type="file" accept="image/*" />
+        <small id="fileInfo" class="muted" aria-live="polite"></small>
+      </div>
+
+      <!-- Aperçu pixellisé -->
+      <div class="preview" aria-live="polite">
+        <h3>Aperçu pixellisé</h3>
+        <canvas id="pixelPreview" aria-label="Aperçu pixellisé"></canvas>
+      </div>
+
+      <!-- Réglages principaux -->
+      <div class="field">
+        <label for="cols">Colonnes de la grille : <span id="colsVal">40</span></label>
+        <input id="cols" type="range" min="10" max="120" value="40" />
+      </div>
+
+      <div class="field">
+        <label for="numColors">Nombre de couleurs : <span id="numColorsVal">6</span></label>
+        <input id="numColors" type="range" min="2" max="12" value="6" />
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label for="cellPx">Taille des cases (px) : <span id="cellPxVal">36</span></label>
+          <input id="cellPx" type="range" min="16" max="120" value="36" />
+        </div>
+        <label class="checkbox" for="mergeSameColor">
+          <input id="mergeSameColor" type="checkbox" checked /> Fusionner cellules identiques
+        </label>
+      </div>
+
+      <div class="field">
+        <label for="contrast">Contraste : <span id="contrastVal">0</span></label>
+        <input id="contrast" type="range" min="-100" max="100" value="0" />
+      </div>
+
+      <div class="field">
+        <label for="saturation">Saturation : <span id="saturationVal">0</span></label>
+        <input id="saturation" type="range" min="-100" max="100" value="0" />
+      </div>
+
+      <div class="actions">
+        <button id="exportPNG" type="button" class="btn">Ouvrir PNG dans un onglet</button>
+      </div>
+
+      <p id="status" class="status" aria-live="polite"></p>
+
+      <!-- Nouveau : sélection d'une couleur pour éditer la grille -->
+      <div id="paletteBlock" class="field" aria-live="polite" hidden>
+        <h3>Éditer par couleur</h3>
+        <p class="small muted">Choisis une couleur pour afficher uniquement ses cellules et les éditer manuellement.</p>
+        <div id="paletteList" class="palette"></div>
+      </div>
+
+      <!-- Éditeur de cellule -->
+      <div id="cellEditor" class="field" hidden>
+        <label>Cellule sélectionnée</label>
+        <div class="cellMeta small muted" id="cellMeta">Aucune</div>
+        <label for="cellText">Texte dans la cellule</label>
+        <input id="cellText" type="text" placeholder="ex: 7 + 3" />
+        <div class="actions">
+          <button id="saveCellText" type="button" class="btn">Enregistrer</button>
+          <button id="clearCellText" type="button" class="btn secondary">Effacer</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Colonne droite : grille -->
+    <section class="card" aria-labelledby="grid-title">
+      <div class="card-head">
+        <h2 id="grid-title">Grille (SVG)</h2>
+      </div>
+      <div class="svgWrap">
+        <div id="svgContainer" class="svgContainer" role="img" aria-label="Grille de coloriage générée"></div>
+      </div>
+
+          <!-- Résultats par couleur -->
+      <div id="resultsInline" class="resultsInline" hidden>
+        <h3 class="resultsTitle">Résultats par couleur</h3>
+        <div id="resultsList" class="results"></div>
+        <div class="actions">
+          <button id="resetResults" type="button" class="btn secondary">Réinitialiser</button>
+        </div>
+        <p class="muted small">
+          Ces valeurs sont les nombres associés aux couleurs. Elles s'affichent dans la grille si aucun texte manuel n'est défini pour une cellule.
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <!-- Canvas caché pour le traitement -->
+  <canvas id="work" class="hidden" aria-hidden="true"></canvas>
+
+  <!-- Chemins RELATIFS : app.js doit être à côté de index.html -->
+  <script type="module" src="./app.js" defer></script>
+</body>
+</html>
