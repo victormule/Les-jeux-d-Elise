@@ -36,30 +36,34 @@
         </div>
       </details>
 
-      <!-- Bloc B — Import d'image (toujours visible) -->
-      <section class="panel" id="panel-import">
-        <div class="panel-body">
-          <div class="field">
-            <label for="fileInput">Image (PNG, JPEG, WEBP, GIF, BMP)</label>
-            <div class="uploader">
-              <label class="uploader-btn">
-                <input id="fileInput" name="fileInput" type="file" accept="image/*" />
-                <span class="uploader-icon" aria-hidden="true">📁</span>
-                <span>Choisir une Image</span>
-              </label>
-              <div class="uploader-meta">
-                <di></di>
-                <span class="uploader-label muted">Sélection&nbsp;:</span>
-                <span id="fileInfo" class="uploader-name">Aucun fichier</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        <!-- Bloc F — Projet -->
-<section class="panel" id="panel-project">
-  <div class="panel-head">
+<!-- Bloc B — Projet (repliable) -->
+<details class="panel" id="panel-project" open>
+  <summary class="panel-head">
     <div class="panel-title">Projet</div>
+  </summary>
+
+  <!-- Sous-bloc : Import de l'image -->
+  <div class="panel-body">
+    <div class="field">
+      <label for="fileInput">Image (PNG, JPEG, WEBP, GIF, BMP)</label>
+      <div class="uploader">
+        <label class="uploader-btn">
+          <input id="fileInput" name="fileInput" type="file" accept="image/*" />
+          <span class="uploader-icon" aria-hidden="true">📁</span>
+          <span>Choisir une image</span>
+        </label>
+        <div class="uploader-meta">
+          <span class="uploader-label muted">Sélection&nbsp;:</span>
+          <span id="fileInfo" class="uploader-name">Aucun fichier</span>
+        </div>
+      </div>
+    </div>
   </div>
+
+  <!-- fine séparation -->
+  <div class="panel-divider" aria-hidden="true"></div>
+
+  <!-- Sous-bloc : Import/Export du projet JSON -->
   <div class="panel-body">
     <div class="actions" style="gap:10px; flex-wrap:wrap;">
       <button id="exportProject" type="button" class="btn">Exporter projet (.json)</button>
@@ -69,8 +73,8 @@
       </label>
     </div>
   </div>
-</section>
-      </section>
+</details>
+
 
       <!-- Bloc C — Réglages (repliables) -->
       <details class="panel" id="panel-settings" open>
@@ -81,7 +85,7 @@
           <div class="row">
             <label class="checkbox" for="mergeSameColor">
               <input id="mergeSameColor" type="checkbox" checked />
-              Fusionner cellules identiques
+              Fusionner cellules identiques 
             </label>
             <div class="field">
               <label for="cellPx">Taille des pixels : <span id="cellPxVal">36</span></label>
@@ -202,4 +206,5 @@
   <script type="module" src="./app.js" defer></script>
 </body>
 </html>
+
 
