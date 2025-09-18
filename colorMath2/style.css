@@ -327,9 +327,10 @@ a:hover { text-decoration: underline; }
 }
 
 .site-logo {
-  width: 100px;   /* ajuste la taille */
-  height: 100px;
+  width: 120px;   /* ajuste la taille */
+  height: 120px;
   object-fit: contain;
 }
+
 
 
