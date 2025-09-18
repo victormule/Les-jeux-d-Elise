@@ -307,3 +307,15 @@ a:hover { text-decoration: underline; }
   }
 }
 
+/* Fine ligne séparatrice à l'intérieur d'un panel */
+.panel-divider {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    rgba(148,163,184,.12),
+    rgba(148,163,184,.22),
+    rgba(148,163,184,.12)
+  );
+  margin: 6px 0;
+}
+
