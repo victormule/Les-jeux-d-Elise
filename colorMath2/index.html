@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="Génère une grille de coloriage magique à partir d'une image et permet d'éditer manuellement les cellules par couleur." />
-  <title>Coloriage magique – Simple</title>
+  <meta name="description" content="Génère une grille de coloriage magique à partir d'une image et permet d'éditer manuellement les ennoncés pour chaques rectangle de chaque couleur." />
+  <title>Coloriage Magique</title>
   <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
@@ -15,8 +15,8 @@
   </noscript>
 
   <header class="container" role="banner">
-    <h1>Coloriage magique (simple)</h1>
-    <p class="muted">Importe une image, la pixelise et édite manuellement les cellules pour créer tes exercices.</p>
+    <h1>Coloriage Magique </h1>
+    <p class="muted">Génère une grille de coloriage magique à partir d'une image et permet d'éditer manuellement les ennoncés pour chaques rectangle de chaque couleur.</p>
   </header>
 
   <main class="container grid" role="main">
@@ -24,10 +24,10 @@
     <section class="card" aria-labelledby="controls-title">
       <h2 id="controls-title" class="visually-hidden">Contrôles</h2>
 
-      <!-- Bloc A — Réglages & aperçu (repliable) -->
+      <!-- Bloc A — Aperçu (repliable) -->
       <details class="panel" id="panel-top" open>
         <summary class="panel-head">
-          <div class="panel-title">Réglages & aperçu</div>
+          <div class="panel-title">Aperçu de l'image</div>
         </summary>
         <div class="panel-body">
           <div class="preview preview-wide" aria-live="polite">
@@ -45,21 +45,37 @@
               <label class="uploader-btn">
                 <input id="fileInput" name="fileInput" type="file" accept="image/*" />
                 <span class="uploader-icon" aria-hidden="true">📁</span>
-                <span>Choisir un fichier</span>
+                <span>Choisir une Image</span>
               </label>
               <div class="uploader-meta">
+                <di></di>
                 <span class="uploader-label muted">Sélection&nbsp;:</span>
                 <span id="fileInfo" class="uploader-name">Aucun fichier</span>
               </div>
             </div>
           </div>
         </div>
+        <!-- Bloc F — Projet -->
+<section class="panel" id="panel-project">
+  <div class="panel-head">
+    <div class="panel-title">Projet</div>
+  </div>
+  <div class="panel-body">
+    <div class="actions" style="gap:10px; flex-wrap:wrap;">
+      <button id="exportProject" type="button" class="btn">Exporter projet (.json)</button>
+      <label class="btn secondary" style="margin:0;">
+        <input id="importProjectInput" type="file" accept="application/json" style="display:none;">
+        Importer projet (.json)
+      </label>
+    </div>
+  </div>
+</section>
       </section>
 
       <!-- Bloc C — Réglages (repliables) -->
       <details class="panel" id="panel-settings" open>
         <summary class="panel-head">
-          <div class="panel-title">Réglages avancés</div>
+          <div class="panel-title">Réglages</div>
         </summary>
         <div class="panel-body">
           <div class="row">
@@ -68,13 +84,13 @@
               Fusionner cellules identiques
             </label>
             <div class="field">
-              <label for="cellPx">Taille des cases (px) : <span id="cellPxVal">36</span></label>
+              <label for="cellPx">Taille des pixels : <span id="cellPxVal">36</span></label>
               <input id="cellPx" type="range" min="16" max="120" value="36" />
             </div>
           </div>
 
           <div class="field">
-            <label for="cols">Colonnes de la grille : <span id="colsVal">40</span></label>
+            <label for="cols">Nombre de pixels en largeur : <span id="colsVal">40</span></label>
             <input id="cols" type="range" min="10" max="120" value="40" />
           </div>
 
@@ -100,11 +116,11 @@
       <!-- Bloc D — Éditeur de couleur -->
       <section class="panel" id="panel-editor">
         <div class="panel-head">
-          <div class="panel-title">Éditeur de couleur</div>
+          <div class="panel-title">Éditeur d'énnoncés</div>
         </div>
         <div class="panel-body">
           <div id="paletteBlock" class="field" aria-live="polite" hidden>
-            <p class="small muted">Choisis une couleur pour afficher uniquement ses cellules et les éditer manuellement.</p>
+            <p class="small muted">Choisis une couleur à afficher dans la grille puis selectionner un rectangle</p>
             <div id="paletteList" class="palette"></div>
           </div>
 
@@ -116,10 +132,10 @@
             <input id="cellText" type="text" placeholder="ex: 7 + 3" />
 
             <div class="row" style="align-items:center; gap:10px; margin-top:8px;">
-              <label for="cellFontPx" class="small muted" style="min-width:140px;">Taille du texte (px)</label>
+              <label for="cellFontPx" class="small muted" style="min-width:140px;">Taille du texte</label>
               <input id="cellFontPx" type="number" min="8" max="48" step="1" placeholder="auto" style="max-width:120px;">
           
-              <small class="muted">Laisse vide ou clique “Auto” pour taille automatique.</small>
+              <small class="muted">Laisse vide pour taille automatique.</small>
             </div>
           </div>
         </div>
@@ -132,27 +148,17 @@
         </div>
         <div class="panel-body">
           <div class="actions">
-            <button id="exportPNG" type="button" class="btn">Ouvrir PNG dans un onglet</button>
+            <button id="exportPNG" type="button" class="btn">Voir le Coloriage</button>
+        <div class="panel-body">
+          <div id="paletteBlock" class="field" aria-live="polite" hidden>
+            <p class="small muted">Affiche le coloriage dans un nouvel onglet pour l'enregistrer ou l'imprimer.</p>
+            <div id="paletteList" class="palette"></div>
+          </div>
           </div>
         </div>
       </section>
-<!-- Bloc F — Projet -->
-<section class="panel" id="panel-project">
-  <div class="panel-head">
-    <div class="panel-title">Projet</div>
-  </div>
-  <div class="panel-body">
-    <div class="actions" style="gap:10px; flex-wrap:wrap;">
-      <button id="exportProject" type="button" class="btn">Exporter projet (.json)</button>
-      <label class="btn secondary" style="margin:0;">
-        <input id="importProjectInput" type="file" accept="application/json" style="display:none;">
-        Importer projet (.json)
-      </label>
-    </div>
-  </div>
-</section>
 
-    </section>
+</section>
 
 
 
@@ -196,3 +202,4 @@
   <script type="module" src="./app.js" defer></script>
 </body>
 </html>
+
