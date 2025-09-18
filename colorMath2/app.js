@@ -148,6 +148,46 @@ function wrapWordsToWidth(text, fontPx, maxWidth) {
   }
   return lines;
 }
+// ====== sRGB -> CIELAB (D65) ===========================================
+function srgbToLinear(c){ c/=255; return c<=0.04045 ? c/12.92 : Math.pow((c+0.055)/1.055, 2.4); }
+function linearToSrgb(c){ const v=c<=0.0031308 ? 12.92*c : 1.055*Math.pow(c,1/2.4)-0.055; return Math.round(clamp(v,0,1)*255); }
+function rgbToXyz(r,g,b){
+  const R=srgbToLinear(r), G=srgbToLinear(g), B=srgbToLinear(b);
+  return {
+    x: 0.4124564*R + 0.3575761*G + 0.1804375*B,
+    y: 0.2126729*R + 0.7151522*G + 0.0721750*B,
+    z: 0.0193339*R + 0.1191920*G + 0.9503041*B
+  };
+}
+function xyzToLab(x,y,z){
+  // D65 white
+  const Xn=0.95047, Yn=1.00000, Zn=1.08883;
+  let fx = x/Xn, fy = y/Yn, fz = z/Zn;
+  const e = 216/24389, k = 24389/27;
+  function f(t){ return t>e ? Math.cbrt(t) : (k*t + 16)/116; }
+  fx=f(fx); fy=f(fy); fz=f(fz);
+  return { L:116*fy - 16, a:500*(fx - fy), b:200*(fy - fz) };
+}
+function rgbToLab(r,g,b){ const xyz=rgbToXyz(r,g,b); return xyzToLab(xyz.x, xyz.y, xyz.z); }
+
+// Feature Lab (poids doux sur L pour ne pas “griser”)
+function labFeature(r,g,b, wL=0.8, wa=1.0, wb=1.0){
+  const {L,a,b:bb} = rgbToLab(r,g,b);
+  return [L*wL, a*wa, bb*wb];
+}
+
+// Petites stats image pour Auto
+function computeImageStats(imgData){
+  const d=imgData.data, N=d.length/4;
+  let satSum=0, uniq=new Set();
+  for(let i=0;i<d.length;i+=4){
+    const r=d[i], g=d[i+1], b=d[i+2];
+    const [h,s,l] = rgbToHsl(r,g,b);
+    satSum += s;
+    uniq.add((r<<16)|(g<<8)|b);
+  }
+  return { satMean: satSum/N, uniqueCount: uniq.size, pixelCount: N };
+}
 
 
 // ===== Helpers Projet (image & signatures) ==============================
@@ -771,60 +811,110 @@ async function processImage() {
 
     // K = entre 2 et 12 (toujours max 12)
 // K demandé par l'UI, borné à 12
-// K demandé par l'UI, borné à 12
+// K demandé (borné à 12)
 const K = clamp(state.numColors, 2, 12);
 
-// 1) Palette exacte si l'image n'a pas plus de K couleurs uniques
-const uniq = buildHistogram(imgData); // trié par fréquence
+// Heuristique pour Auto
+const stats = computeImageStats(imgData);
+let mode = 'auto'; // pour l’instant on garde auto; plus tard tu peux le lier à un select
+// Décision "auto"
+if (stats.uniqueCount <= Math.min(K*1.3, 256) || stats.satMean >= 0.42) {
+  mode = 'pixel';        // pixel-art ou image déjà très saturée
+} else {
+  mode = 'illustration'; // illustration/photo : Lab sera mieux
+}
+
+// 0) Palette exacte si très peu de couleurs (quel que soit le mode)
+const uniq = buildHistogram(imgData);
 if (uniq.length > 0 && uniq.length <= K) {
-  // --- utiliser EXACTEMENT les couleurs de l'image ---
   state.palette = uniq.map(u => u.rgb);
 
-  // assigner les labels par couleur exacte (rapide et sans perte)
   const keyToIdx = new Map();
   uniq.forEach((u, idx) => {
-    const k = (u.rgb[0] << 16) | (u.rgb[1] << 8) | u.rgb[2];
-    keyToIdx.set(k, idx);
+    keyToIdx.set((u.rgb[0]<<16)|(u.rgb[1]<<8)|u.rgb[2], idx);
   });
 
-  const labelsArr = new Uint16Array(gw * gh);
+  const labelsArr = new Uint16Array(gw*gh);
   const d = imgData.data;
-  for (let p = 0, px = 0; p < d.length; p += 4, px++) {
-    const k = (d[p] << 16) | (d[p + 1] << 8) | d[p + 2];
-    labelsArr[px] = keyToIdx.get(k) ?? 0; // sécurité
+  for (let p=0,px=0; p<d.length; p+=4,px++) {
+    const k = (d[p]<<16)|(d[p+1]<<8)|d[p+2];
+    labelsArr[px] = keyToIdx.get(k) ?? 0;
   }
   state.labels = labelsArr;
 
 } else {
-  // 2) Sinon, k-means++ en HSL 4D (teinte/sat prioritaires)
-  const points = new Array(gw * gh);
-  const d = imgData.data;
-  for (let p = 0, px = 0; p < d.length; p += 4, px++) {
-    points[px] = hslFeature(d[p], d[p + 1], d[p + 2], 2.6, 1.5, 0.50);
+  // 1) Construire les features selon le mode
+  const dta = imgData.data;
+  const points = new Array(gw*gh);
+
+  if (mode === 'pixel') {
+    // k-means en RGB pur (respecte les sprites & aplats)
+    for (let p=0,px=0; p<dta.length; p+=4,px++) {
+      points[px] = [dta[p], dta[p+1], dta[p+2]]; // pas de vividize ici
+    }
+    const { centers, labels } = kmeans(points, K, 24, state.seed||1, 0.0);
+    state.labels = labels;
+    state.palette = centers.map(c => [Math.round(c[0]), Math.round(c[1]), Math.round(c[2])]);
+
+  } else {
+    // mode 'illustration' : k-means perceptif en CIELAB
+    for (let p=0,px=0; p<dta.length; p+=4,px++) {
+      points[px] = labFeature(dta[p], dta[p+1], dta[p+2], 0.85, 1.0, 1.0);
+    }
+    const { centers, labels } = kmeans(points, K, 28, state.seed||1, 0.18);
+    state.labels = labels;
+
+    // Convertir centres Lab -> RGB (via hslToRgb ? NON, on garde un petit boost simple)
+    state.palette = centers.map((c) => {
+      // c = [L*, a*, b*] pondérés -> dépondération
+      const L = c[0] / 0.85, a = c[1] / 1.0, bb = c[2] / 1.0;
+
+      // Lab -> sRGB (rapide en re-échantillonnant : on passe par XYZ)
+      // Pour éviter un long code inverse Lab->XYZ->RGB, on approxime via une reconversion “douce” :
+      // On projette Lab sur HSL pour un léger vividize, en restant prudent.
+      // 1) On fait un “proxy” HSL à partir de la moyenne locale : on repart de la couleur moyenne des points de ce centre
+      //    => plus simple : convertissons Lab -> sRGB correctement :
+
+      // Lab -> XYZ
+      function labToXyz(L,a,bb){
+        const Yn=1, Xn=0.95047, Zn=1.08883;
+        const fy=(L+16)/116, fx=fy + a/500, fz=fy - bb/200;
+        const e = 216/24389, k = 24389/27;
+        const fx3=fx*fx*fx, fy3=fy*fy*fy, fz3=fz*fz*fz;
+        const xr = fx3> (e) ? fx3 : (116*fx-16)/k;
+        const yr = fy3> (e) ? fy3 : (116*fy-16)/k;
+        const zr = fz3> (e) ? fz3 : (116*fz-16)/k;
+        return { x:xr*Xn, y:yr*Yn, z:zr*Zn };
+      }
+      function xyzToRgb(x,y,z){
+        const Rl =  3.2404542*x + (-1.5371385)*y + (-0.4985314)*z;
+        const Gl = (-0.9692660)*x +  1.8760108*y +  0.0415560*z;
+        const Bl =  0.0556434*x + (-0.2040259)*y +  1.0572252*z;
+        return [
+          linearToSrgb(Rl),
+          linearToSrgb(Gl),
+          linearToSrgb(Bl),
+        ];
+      }
+      const xyz = labToXyz(L, a, bb);
+      let [R,G,B] = xyzToRgb(xyz.x, xyz.y, xyz.z);
+
+      // vividize très léger (uniquement si pas trop neutre)
+      const [h,s,l] = rgbToHsl(R,G,B);
+      const s2 = s < 0.12 ? s : Math.min(1, Math.max(s, 0.28) * 1.06);
+      const l2 = s < 0.12 ? l : clamp(l*0.98 + 0.01, 0, 1);
+      [R,G,B] = hslToRgb(h, s2, l2);
+
+      return [R,G,B];
+    });
   }
-
-  const { centers, labels } = kmeans(points, K, 24, state.seed || 1, 0.22);
-  state.labels = labels;
-
-  // convertir centres -> HSL -> RGB (avec légère “vividisation”)
-  state.palette = centers.map((c) => {
-    const ch = c[0] / 2.6, sh = c[1] / 2.6; // / wH
-    let h = Math.atan2(sh, ch); if (h < 0) h += 2 * Math.PI; h /= (2 * Math.PI);
-    const s = clamp(c[2] / 1.5, 0, 1);      // / wS
-    let   l = clamp(c[3] / 0.50, 0, 1);     // / wL
-
-    const s2 = Math.min(1, s < 0.10 ? s : Math.max(s, 0.36) * 1.08);
-    const l2 = (s < 0.10) ? l : clamp(l * 0.97 + 0.02, 0, 1);
-
-    const [R, G, B] = hslToRgb(h, s2, l2);
-    return [R, G, B];
-  });
 }
 
+// aligne la longueur des résultats texte
+if (!state.customResults || state.customResults.length !== state.palette.length) {
+  state.customResults = state.palette.map(() => '');
+}
 
-    if (!state.customResults.length || state.customResults.length !== state.palette.length) {
-      state.customResults = state.palette.map(() => '');
-    }
 
     // Reset édition
 // Reset édition
