@@ -319,3 +319,16 @@ a:hover { text-decoration: underline; }
   margin: 6px 0;
 }
 
+/* ===== Logo site ===== */
+.site-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.site-logo {
+  width: 64px;   /* ajuste la taille */
+  height: 64px;
+  object-fit: contain;
+}
+
