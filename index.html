@@ -1,117 +1,198 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Les jeux d'Élise</title>
-  <link rel="icon" type="image/png" href="favicon.png">
-  <style>
-    @font-face{font-family:'Borel';src:url('font/Borel-Regular.otf') format('opentype');}
-    body{font-family:Arial,sans-serif;background:#fff0f5;margin:0;padding:0;}
-
-    header{display:flex;align-items:center;gap:20px;padding:20px;max-width:1000px;margin:auto;text-align:left;}
-    /* Logo animé de façon rigolote */
-    .logo{
-      max-width:250px;
-      flex-shrink:0;
-      /* animations de base : flottement + wobble */
-      animation:logoFloat 3s ease-in-out infinite,
-                 logoWobble 6s ease-in-out infinite;
-      transform-origin:center bottom;
-      cursor:pointer;
-    }
-    /* survol : petit saut vers le haut et rotation rapide */
-    .logo:hover {
-      animation:logoHover 0.4s ease-in-out forwards;
-    }
-    @keyframes logoHover {
-      0% { transform: translateY(0) rotate(0deg) scale(1); }
-      30% { transform: translateY(-5px) rotate(5deg) scale(1.1); }
-      60% { transform: translateY(-8px) rotate(-3deg) scale(1.05); }
-      100% { transform: translateY(0) rotate(0deg) scale(1); }
-    }
-    @keyframes logoFloat {
-      0%,100% { transform: translateY(0) rotate(0deg); }
-      25%      { transform: translateY(-6px) rotate(2deg); }
-      50%      { transform: translateY(0) rotate(0deg); }
-      75%      { transform: translateY(4px) rotate(-2deg); }
-    }
-    @keyframes logoWobble {
-      0%,20%,100%  { transform: translateY(0) rotate(0deg); }
-      10%,30%      { transform: translateY(-2px) rotate(3deg); }
-      40%          { transform: translateY(2px) rotate(-3deg); }
-      60%,80%      { transform: translateY(1px) rotate(1deg); }
-    }
-
-    /* titre sautillant */
-    h1{
-      margin:0;
-      font-size:2.6em;
-      color:#d65a8c;
-      font-family:'Comic Sans MS',cursive,sans-serif;
-      white-space:pre;
-    }
-    h1 span{display:inline-block;animation:jump 2s ease-in-out infinite;}
-    @keyframes jump{0%,100%{transform:translateY(0);}30%{transform:translateY(-8px);}60%{transform:translateY(4px);}}
-
-    p{font-family:'Borel',cursive;color:#333;font-size:1.2em;margin:10px 0 0 0;max-width:700px;}
-
-        /* ------------- RESPONSIVE : < 780 px --------------- */
-        @media (max-width: 780px) {
-      header {
-        flex-direction: column;   /* logo au‑dessus */
-        align-items: center;
-        text-align: center;
-        gap: 10px;
-      }
-      .logo {
-        max-width: 180px;        /* logo un peu plus petit */
-      }
-      .header-text {
-        align-items: center;     /* centre le titre + paragraphe */
-      }
-      p {
-        max-width: 90%;          /* paragraphe plus étroit */
-      }
-    }
-
-    .games{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px;padding:20px;max-width:1000px;margin:auto;}
-    .game{position:relative;background:#fff;border-radius:12px;padding:10px;box-shadow:0 4px 8px rgba(0,0,0,.1);transition:transform .2s;}
-    .game:hover{transform:scale(1.05);} .game img{width:100%;border-radius:10px;cursor:pointer;}
-    .tooltip{display:none;position:absolute;bottom:110%;left:50%;transform:translateX(-50%);background:#fff;color:#333;font-size:.9em;border:1px solid #ccc;padding:10px;border-radius:8px;width:220px;box-shadow:0 2px 6px rgba(0,0,0,.2);z-index:10;}
-    .game:hover .tooltip{display:block;}
-  </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="Génère une grille de coloriage magique à partir d'une image et permet d'éditer manuellement les cellules par couleur." />
+  <title>Coloriage magique – Simple</title>
+  <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
-  <header>
-    <img src="logo.png" alt="Logo Élise" class="logo">
-    <div class="header-text">
-      <h1 id="title">Les jeux d'Élise</h1>
-      <p>Bienvenue dans l'univers coloré et rigolo des jeux d'Élise ! Ici, les enfants s'amusent tout en apprenant à compter, à reconnaître les chiffres, et à résoudre de petits défis ludiques. Chaque jeu est conçu pour stimuler la curiosité, encourager la réflexion et rendre les maths drôlement plus sympas !</p>
+  <noscript>
+    <div style="padding:12px;background:#fee2e2;color:#7f1d1d;font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif">
+      Cette application nécessite JavaScript pour fonctionner.
     </div>
+  </noscript>
+
+  <header class="container" role="banner">
+    <h1>Coloriage magique (simple)</h1>
+    <p class="muted">Importe une image, la pixelise et édite manuellement les cellules pour créer tes exercices.</p>
   </header>
 
-  <main class="games">
-    <div class="game"><div class="tooltip">Jeu de Bingo pour travailler la numération de 1 à 100, avec des petits pièges pour que ce soit plus palpitant !</div><a href="bingo.html"><img src="bingo.png" alt="Bingo Dingo"></a></div>
-    <div class="game"><div class="tooltip">Jeu de Mémorie pour travailler la numération, sa vitesse et sa mémoire !</div><a href="memorie.html"><img src="memorie.png" alt="Mémo Dingo"></a></div>
-   <div class="game"><div class="tooltip">Pour convertir facilement une image en coloriage magique (addition, soustraction, multiplication, division)</div><a href="coloriage.html"><img src="coloriage.png" alt="Coloriage Magique Automatique"></a></div>
-   <div class="game"><div class="tooltip">Pour convertir facilement une image en coloriage magique avec entrée manuelle</div><a href="colorMath2/index.html"><img src="colormath2.png" alt="Coloriage Magique Manuel"></a></div>
-    <div class="game"><div class="tooltip">Jeu de capture Pokemon sous forme de puzzle mathématique pour travailler les additions, soustractions, multiplications, divisions</div><a href="pokepuz/pokepuzzle.html"><img src="pokepuzzle.png" alt="Poké Puzzle"></a></div>
-    <div class="game"></div><div class="game"></div>
+  <main class="container grid" role="main">
+    <!-- ================= Colonne gauche : contrôles ================= -->
+    <section class="card" aria-labelledby="controls-title">
+      <h2 id="controls-title" class="visually-hidden">Contrôles</h2>
+
+      <!-- Bloc A — Réglages & aperçu (repliable) -->
+      <details class="panel" id="panel-top" open>
+        <summary class="panel-head">
+          <div class="panel-title">Réglages & aperçu</div>
+        </summary>
+        <div class="panel-body">
+          <div class="preview preview-wide" aria-live="polite">
+            <canvas id="pixelPreview" aria-label="Aperçu pixellisé"></canvas>
+          </div>
+        </div>
+      </details>
+
+      <!-- Bloc B — Import d'image (toujours visible) -->
+      <section class="panel" id="panel-import">
+        <div class="panel-body">
+          <div class="field">
+            <label for="fileInput">Image (PNG, JPEG, WEBP, GIF, BMP)</label>
+            <div class="uploader">
+              <label class="uploader-btn">
+                <input id="fileInput" name="fileInput" type="file" accept="image/*" />
+                <span class="uploader-icon" aria-hidden="true">📁</span>
+                <span>Choisir un fichier</span>
+              </label>
+              <div class="uploader-meta">
+                <span class="uploader-label muted">Sélection&nbsp;:</span>
+                <span id="fileInfo" class="uploader-name">Aucun fichier</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Bloc C — Réglages (repliables) -->
+      <details class="panel" id="panel-settings" open>
+        <summary class="panel-head">
+          <div class="panel-title">Réglages avancés</div>
+        </summary>
+        <div class="panel-body">
+          <div class="row">
+            <label class="checkbox" for="mergeSameColor">
+              <input id="mergeSameColor" type="checkbox" checked />
+              Fusionner cellules identiques
+            </label>
+            <div class="field">
+              <label for="cellPx">Taille des cases (px) : <span id="cellPxVal">36</span></label>
+              <input id="cellPx" type="range" min="16" max="120" value="36" />
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="cols">Colonnes de la grille : <span id="colsVal">40</span></label>
+            <input id="cols" type="range" min="10" max="120" value="40" />
+          </div>
+
+          <div class="field">
+            <label for="numColors">Nombre de couleurs : <span id="numColorsVal">6</span></label>
+            <input id="numColors" type="range" min="2" max="12" value="6" />
+          </div>
+
+          <div class="field">
+            <label for="contrast">Contraste : <span id="contrastVal">0</span></label>
+            <input id="contrast" type="range" min="-100" max="100" value="0" />
+          </div>
+
+          <div class="field">
+            <label for="saturation">Saturation : <span id="saturationVal">0</span></label>
+            <input id="saturation" type="range" min="-100" max="100" value="0" />
+          </div>
+
+          <p id="status" class="status" aria-live="polite"></p>
+        </div>
+      </details>
+
+      <!-- Bloc D — Éditeur de couleur -->
+      <section class="panel" id="panel-editor">
+        <div class="panel-head">
+          <div class="panel-title">Éditeur de couleur</div>
+        </div>
+        <div class="panel-body">
+          <div id="paletteBlock" class="field" aria-live="polite" hidden>
+            <p class="small muted">Choisis une couleur pour afficher uniquement ses cellules et les éditer manuellement.</p>
+            <div id="paletteList" class="palette"></div>
+          </div>
+
+          <div id="cellEditor" class="field" hidden>
+            <label>Cellule sélectionnée</label>
+            <div class="cellMeta small muted" id="cellMeta">Aucune</div>
+
+            <label for="cellText">Texte dans la cellule</label>
+            <input id="cellText" type="text" placeholder="ex: 7 + 3" />
+
+            <div class="row" style="align-items:center; gap:10px; margin-top:8px;">
+              <label for="cellFontPx" class="small muted" style="min-width:140px;">Taille du texte (px)</label>
+              <input id="cellFontPx" type="number" min="8" max="48" step="1" placeholder="auto" style="max-width:120px;">
+          
+              <small class="muted">Laisse vide ou clique “Auto” pour taille automatique.</small>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Bloc E — Export -->
+      <section class="panel" id="panel-export">
+        <div class="panel-head">
+          <div class="panel-title">Export</div>
+        </div>
+        <div class="panel-body">
+          <div class="actions">
+            <button id="exportPNG" type="button" class="btn">Ouvrir PNG dans un onglet</button>
+          </div>
+        </div>
+      </section>
+<!-- Bloc F — Projet -->
+<section class="panel" id="panel-project">
+  <div class="panel-head">
+    <div class="panel-title">Projet</div>
+  </div>
+  <div class="panel-body">
+    <div class="actions" style="gap:10px; flex-wrap:wrap;">
+      <button id="exportProject" type="button" class="btn">Exporter projet (.json)</button>
+      <label class="btn secondary" style="margin:0;">
+        <input id="importProjectInput" type="file" accept="application/json" style="display:none;">
+        Importer projet (.json)
+      </label>
+    </div>
+  </div>
+</section>
+
+    </section>
+
+
+
+
+    <!-- ================= Colonne droite : grille ================= -->
+    <section class="card" aria-labelledby="grid-title">
+      <div class="card-head">
+        <h2 id="grid-title">Grille (SVG)</h2>
+      </div>
+
+      <!-- Barre de zoom -->
+      <div class="zoomBar">
+        <button id="zoomOut" class="btn secondary" type="button" title="Zoom out">−</button>
+        <button id="zoomIn"  class="btn secondary" type="button" title="Zoom in">+</button>
+        <button id="zoomReset" class="btn secondary" type="button" title="Remettre à 100%">100%</button>
+        <span class="zoomInfo small muted" id="zoomLabel">100%</span>
+      </div>
+
+      <!-- Fenêtre d’aperçu scrollable -->
+      <div class="svgWrap">
+        <div id="svgContainer" class="svgContainer" role="img" aria-label="Grille de coloriage générée"></div>
+      </div>
+
+      <!-- Résultats par couleur (sous la grille) -->
+      <div id="resultsInline" class="resultsInline" hidden>
+        <h3 class="resultsTitle">Résultats par couleur</h3>
+        <div id="resultsList" class="results"></div>
+        <div class="actions">
+          <button id="resetResults" type="button" class="btn secondary">Réinitialiser</button>
+        </div>
+        <p class="muted small">
+          Ces valeurs (texte autorisé) décrivent chaque couleur. Elles apparaissent dans la légende de l’export PNG.
+        </p>
+      </div>
+    </section>
   </main>
 
-  <script>
-    const title = document.getElementById('title');
-    const chars = [...title.textContent];
-    title.innerHTML = chars.map((ch,i)=>
-      `<span style="animation-delay:${(i*0.12).toFixed(2)}s">${ch===' ' ? '&nbsp;' : ch}</span>`
-    ).join('');
-  </script>
+  <!-- Canvas caché pour le traitement -->
+  <canvas id="work" class="hidden" aria-hidden="true"></canvas>
+
+  <script type="module" src="./app.js" defer></script>
 </body>
 </html>
-
-
-
-
-
-
