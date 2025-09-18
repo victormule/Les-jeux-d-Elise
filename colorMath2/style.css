@@ -327,8 +327,9 @@ a:hover { text-decoration: underline; }
 }
 
 .site-logo {
-  width: 64px;   /* ajuste la taille */
-  height: 64px;
+  width: 100px;   /* ajuste la taille */
+  height: 100px;
   object-fit: contain;
 }
+
 
