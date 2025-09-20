@@ -774,7 +774,7 @@ function openPNGInNewTab() {
   const svg = svgContainer?.querySelector('svg');
   if (!svg) return;
 
-  // Taille du SVG
+  // Récup taille du SVG
   const vb = svg.getAttribute('viewBox');
   let W = 0, H = 0;
   if (vb) {
@@ -785,77 +785,107 @@ function openPNGInNewTab() {
     W = Math.round(parseFloat(svg.getAttribute('width')) || 0);
     H = Math.round(parseFloat(svg.getAttribute('height')) || 0);
   }
-  if (!W || !H) { alert('Impossible de déterminer la taille du SVG.'); return; }
+  if (!W || !H) { alert("Impossible de déterminer la taille du SVG."); return; }
 
-  // SVG -> PNG
+  // SVG -> Image
   const xml = new XMLSerializer().serializeToString(svg);
   const src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(xml)));
   const img = new Image();
 
   img.onload = () => {
-    const canvas = document.createElement('canvas');
-    canvas.width = W; canvas.height = H;
-    const ctx = canvas.getContext('2d');
-    ctx.imageSmoothingEnabled = false;
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, W, H);
-    ctx.drawImage(img, 0, 0, W, H);
-    const dataURL = canvas.toDataURL('image/png');
+    // --- Paramètres de rendu du bloc légende (tu peux ajuster) ---
+    const pad = 16;              // marges autour du bloc légende
+    const sw  = 18;              // taille du carré
+    const gap = 10;              // espacement entre éléments
+    const titleFs = 18;          // taille titre
+    const rowFs   = 14;          // taille ligne
+    const rowH = Math.max(sw, Math.ceil(rowFs * 1.35)); // hauteur de ligne
 
-    // Légende (carré = résultat)
     const palette = Array.isArray(state.palette) ? state.palette : [];
     const results = Array.isArray(state.customResults) ? state.customResults : [];
+    const rowsCount = Math.min(palette.length, results.length);
 
-    const rows = (palette.length && results.length)
-      ? palette.map((rgb, i) => {
-          const [r, g, b] = rgb;
-          const val = Math.max(1, Number(results[i] ?? (i + 2)));
-          const safeVal = Number.isFinite(val) ? val : '';
-          return `
-            <div class="legend__row">
-              <span class="legend__swatch" data-color="${r},${g},${b}"></span>
-              <span class="legend__eq">=</span>
-              <span class="legend__val">${safeVal}</span>
-            </div>`;
-        }).join('')
-      : '';
+    // Hauteur de la légende
+    const legendHeight = rowsCount > 0
+      ? pad + titleFs + 10 + rowsCount * rowH + pad
+      : 0;
 
-    const legendHTML = rows
-      ? `<section class="legend">
-           <h2 class="legend__title">Résultats par couleur</h2>
-           ${rows}
-         </section>`
-      : '';
+    // Canvas final = grille + légende
+    const canvas = document.createElement('canvas');
+    canvas.width  = W;
+    canvas.height = H + legendHeight;
 
-    // Ouvrir l’onglet (référence une feuille CSS séparée)
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+
+    // Fond blanc
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Dessiner la grille
+    ctx.drawImage(img, 0, 0, W, H);
+
+    // Dessiner la légende si nécessaire
+    if (rowsCount > 0) {
+      // Titre
+      ctx.save();
+      ctx.fillStyle = '#000';
+      ctx.font = `${titleFs}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillText('Résultats par couleur', pad, H + pad + titleFs);
+
+      // Lignes
+      ctx.font = `${rowFs}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
+      ctx.textBaseline = 'middle';
+      const yStart = H + pad + titleFs + 10;
+
+      for (let i = 0; i < rowsCount; i++) {
+        const [r, g, b] = palette[i];
+        const valRaw = Math.max(1, Number(results[i] ?? (i + 2)));
+        const val = Number.isFinite(valRaw) ? String(valRaw) : '';
+
+        const cy = yStart + i * rowH + rowH / 2;
+
+        // carré couleur
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+        ctx.fillRect(pad, cy - sw / 2, sw, sw);
+        ctx.strokeStyle = 'rgba(0,0,0,.25)';
+        ctx.strokeRect(pad + 0.5, cy - sw / 2 + 0.5, sw - 1, sw - 1);
+
+        // "= valeur"
+        let x = pad + sw + gap;
+        ctx.fillStyle = '#000';
+        ctx.fillText('=', x, cy);
+        x += ctx.measureText('=').width + gap;
+        ctx.font = `bold ${rowFs}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
+        ctx.fillText(val, x, cy);
+        ctx.font = `${rowFs}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`; // reset
+      }
+      ctx.restore();
+    }
+
+    const dataURL = canvas.toDataURL('image/png');
+
+    // Ouvre un onglet avec l’UNIQUE image composite (clic droit > Enregistrer)
     const win = window.open();
     if (win) {
       win.document.write(`<!doctype html>
-<html>
-<head>
+<html><head>
   <meta charset="utf-8">
-  <title>Export PNG — ${W}×${H}px</title>
+  <title>Export PNG — ${canvas.width}×${canvas.height}px</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body class="export-root">
-  <p class="export-info">${W} × ${H} px (échelle 1:1)</p>
-  <img class="export-image" src="${dataURL}" width="${W}" height="${H}" alt="Grille exportée">
-  ${legendHTML}
-  <script>
-    // Colorer les pastilles depuis data-color (aucun style inline de mise en forme)
-    document.querySelectorAll('.legend__swatch').forEach(el => {
-      const c = el.getAttribute('data-color'); // "r,g,b"
-      if (c) el.style.background = 'rgb(' + c + ')';
-    });
-  </script>
-</body>
-</html>`);
+  <p class="export-info">${canvas.width} × ${canvas.height} px (échelle 1:1)</p>
+  <img class="export-image" src="${dataURL}" width="${canvas.width}" height="${canvas.height}" alt="Grille exportée">
+</body></html>`);
       win.document.close();
     }
   };
 
   img.src = src;
 }
+
 
 /*********************************
  * Bootstrap
