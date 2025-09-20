@@ -774,7 +774,7 @@ function openPNGInNewTab() {
   const svg = svgContainer?.querySelector('svg');
   if (!svg) return;
 
-  // Récup taille du SVG
+  // Taille du SVG
   const vb = svg.getAttribute('viewBox');
   let W = 0, H = 0;
   if (vb) {
@@ -793,26 +793,33 @@ function openPNGInNewTab() {
   const img = new Image();
 
   img.onload = () => {
-    // --- Paramètres de rendu du bloc légende (tu peux ajuster) ---
-    const pad = 16;              // marges autour du bloc légende
-    const sw  = 18;              // taille du carré
-    const gap = 10;              // espacement entre éléments
-    const titleFs = 18;          // taille titre
-    const rowFs   = 14;          // taille ligne
-    const rowH = Math.max(sw, Math.ceil(rowFs * 1.35)); // hauteur de ligne
+    // --- Paramètres de rendu de la légende ---
+    const pad = 16;    // marges
+    const sw  = 18;    // carré
+    const gap = 10;    // espacement horizontal
+    const titleFs = 18;
+    const rowFs   = 14;
 
     const palette = Array.isArray(state.palette) ? state.palette : [];
     const results = Array.isArray(state.customResults) ? state.customResults : [];
     const rowsCount = Math.min(palette.length, results.length);
 
-    // Hauteur de la légende
-    const legendHeight = rowsCount > 0
-      ? pad + titleFs + 10 + rowsCount * rowH + pad
-      : 0;
+    // Calcul largeur totale de la ligne légende
+    const ctxTmp = document.createElement('canvas').getContext('2d');
+    ctxTmp.font = `${rowFs}px system-ui, sans-serif`;
 
-    // Canvas final = grille + légende
+    let legendWidth = 0;
+    for (let i = 0; i < rowsCount; i++) {
+      const valRaw = Math.max(1, Number(results[i] ?? (i + 2)));
+      const val = Number.isFinite(valRaw) ? String(valRaw) : '';
+      legendWidth += sw + gap + ctxTmp.measureText('=').width + gap + ctxTmp.measureText(val).width + 2*gap;
+    }
+
+    const legendHeight = rowsCount > 0 ? pad + titleFs + 10 + sw + pad : 0;
+
+    // Canvas final
     const canvas = document.createElement('canvas');
-    canvas.width  = W;
+    canvas.width  = Math.max(W, legendWidth + pad*2);
     canvas.height = H + legendHeight;
 
     const ctx = canvas.getContext('2d');
@@ -822,51 +829,52 @@ function openPNGInNewTab() {
     ctx.fillStyle = '#fff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Dessiner la grille
-    ctx.drawImage(img, 0, 0, W, H);
+    // Grille centrée en haut
+    ctx.drawImage(img, Math.floor((canvas.width - W) / 2), 0, W, H);
 
-    // Dessiner la légende si nécessaire
+    // Légende en ligne
     if (rowsCount > 0) {
-      // Titre
-      ctx.save();
+      const legendY0 = H + pad;
       ctx.fillStyle = '#000';
-      ctx.font = `${titleFs}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
-      ctx.textBaseline = 'alphabetic';
-      ctx.fillText('Résultats par couleur', pad, H + pad + titleFs);
+      ctx.font = `${titleFs}px system-ui, sans-serif`;
+      ctx.fillText('Résultats par couleur', pad, legendY0 + titleFs);
 
-      // Lignes
-      ctx.font = `${rowFs}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
+      let x = pad;
+      const ySw = legendY0 + titleFs + 10;
+
+      ctx.font = `${rowFs}px system-ui, sans-serif`;
       ctx.textBaseline = 'middle';
-      const yStart = H + pad + titleFs + 10;
 
       for (let i = 0; i < rowsCount; i++) {
         const [r, g, b] = palette[i];
         const valRaw = Math.max(1, Number(results[i] ?? (i + 2)));
         const val = Number.isFinite(valRaw) ? String(valRaw) : '';
 
-        const cy = yStart + i * rowH + rowH / 2;
+        const cy = ySw + sw / 2;
 
         // carré couleur
         ctx.fillStyle = `rgb(${r},${g},${b})`;
-        ctx.fillRect(pad, cy - sw / 2, sw, sw);
+        ctx.fillRect(x, cy - sw / 2, sw, sw);
         ctx.strokeStyle = 'rgba(0,0,0,.25)';
-        ctx.strokeRect(pad + 0.5, cy - sw / 2 + 0.5, sw - 1, sw - 1);
+        ctx.strokeRect(x + 0.5, cy - sw / 2 + 0.5, sw - 1, sw - 1);
+        x += sw + gap;
 
-        // "= valeur"
-        let x = pad + sw + gap;
+        // "="
         ctx.fillStyle = '#000';
         ctx.fillText('=', x, cy);
         x += ctx.measureText('=').width + gap;
-        ctx.font = `bold ${rowFs}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
+
+        // valeur
+        ctx.font = `bold ${rowFs}px system-ui, sans-serif`;
         ctx.fillText(val, x, cy);
-        ctx.font = `${rowFs}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`; // reset
+        ctx.font = `${rowFs}px system-ui, sans-serif`;
+        x += ctx.measureText(val).width + 2*gap;
       }
-      ctx.restore();
     }
 
     const dataURL = canvas.toDataURL('image/png');
 
-    // Ouvre un onglet avec l’UNIQUE image composite (clic droit > Enregistrer)
+    // Ouvre l’image finale (grille + légende en ligne)
     const win = window.open();
     if (win) {
       win.document.write(`<!doctype html>
