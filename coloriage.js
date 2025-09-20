@@ -835,7 +835,7 @@ function openPNGInNewTab() {
 <head>
   <meta charset="utf-8">
   <title>Export PNG — ${W}×${H}px</title>
-  <link rel="stylesheet" href="export.css">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body class="export-root">
   <p class="export-info">${W} × ${H} px (échelle 1:1)</p>
