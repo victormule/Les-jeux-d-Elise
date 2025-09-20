@@ -232,3 +232,32 @@ input[type="number"] { -moz-appearance: textfield; }
 .legend__name { color: #ccc; }
 .legend__sep  { color: #666; }
 .legend__val  { font-weight: 600; color: #fff; }
+
+.legend { --sw-size: 18px; }           /* taille du carré (change la valeur si tu veux plus grand) */
+
+.legend__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  border-top: 1px solid #222;
+}
+.legend__row:first-of-type { border-top: none; }
+
+.legend__swatch {
+  width: var(--sw-size);
+  height: var(--sw-size);
+  border-radius: 4px;
+  border: 1px solid rgba(255,255,255,.25);
+  display: inline-block;
+}
+
+.legend__eq {
+  opacity: .9;
+  font-weight: 600;
+}
+
+.legend__val {
+  font-weight: 700;
+}
+
