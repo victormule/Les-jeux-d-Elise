@@ -770,31 +770,91 @@ function redrawSVG(){
 /*********************************
  * Export PNG NET (1:1)
  *********************************/
-function openPNGInNewTab(){
-  const svg = svgContainer?.querySelector('svg'); if(!svg) return
-  const vb = svg.getAttribute('viewBox')
-  let W=0, H=0
-  if (vb) { const p = vb.trim().split(/\s+/); if (p.length===4){ W=Math.round(parseFloat(p[2])); H=Math.round(parseFloat(p[3])); } }
-  if (!W || !H) { W = Math.round(parseFloat(svg.getAttribute('width')) || 0); H = Math.round(parseFloat(svg.getAttribute('height')) || 0) }
-  if (!W || !H) { alert('Impossible de déterminer la taille du SVG.'); return }
+function openPNGInNewTab() {
+  const svg = svgContainer?.querySelector('svg');
+  if (!svg) return;
 
-  const xml = new XMLSerializer().serializeToString(svg)
-  const src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(xml)))
-  const img = new Image()
-  img.onload = () => {
-    const canvas = document.createElement('canvas')
-    canvas.width = W; canvas.height = H
-    const ctx = canvas.getContext('2d')
-    ctx.imageSmoothingEnabled = false
-    ctx.fillStyle = '#fff'; ctx.fillRect(0,0,W,H)
-    ctx.drawImage(img, 0, 0, W, H)
-    const dataURL = canvas.toDataURL('image/png')
-    const win = window.open(); if (win) {
-      win.document.write(`<!doctype html><html><head><meta charset='utf-8'><title>Export PNG — ${W}×${H}px</title><style>html,body{margin:0;padding:16px;background:#111;color:#eee;font:14px system-ui}.info{margin:0 0 8px;color:#aaa}img{display:block;image-rendering:pixelated;image-rendering:crisp-edges}</style></head><body><p class='info'>${W} × ${H} px (échelle 1:1)</p><img src='${dataURL}' width='${W}' height='${H}' alt='Grille exportée'></body></html>`)
-      win.document.close()
-    }
+  // Taille du SVG
+  const vb = svg.getAttribute('viewBox');
+  let W = 0, H = 0;
+  if (vb) {
+    const p = vb.trim().split(/\s+/);
+    if (p.length === 4) { W = Math.round(parseFloat(p[2])); H = Math.round(parseFloat(p[3])); }
   }
-  img.src = src
+  if (!W || !H) {
+    W = Math.round(parseFloat(svg.getAttribute('width')) || 0);
+    H = Math.round(parseFloat(svg.getAttribute('height')) || 0);
+  }
+  if (!W || !H) { alert('Impossible de déterminer la taille du SVG.'); return; }
+
+  // SVG -> PNG
+  const xml = new XMLSerializer().serializeToString(svg);
+  const src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(xml)));
+  const img = new Image();
+
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, W, H);
+    ctx.drawImage(img, 0, 0, W, H);
+    const dataURL = canvas.toDataURL('image/png');
+
+    // Légende
+    const palette = Array.isArray(state.palette) ? state.palette : [];
+    const results = Array.isArray(state.customResults) ? state.customResults : [];
+    const rows = (palette.length && results.length)
+      ? palette.map((rgb, i) => {
+          const [r, g, b] = rgb;
+          const val = Math.max(1, Number(results[i] ?? (i + 2)));
+          const safeVal = Number.isFinite(val) ? val : '';
+          return `
+            <div class="legend__row">
+              <span class="legend__swatch" data-color="${r},${g},${b}"></span>
+              <span class="legend__name">Couleur ${i + 1}</span>
+              <span class="legend__sep">—</span>
+              <span class="legend__val">Résultat&nbsp;: ${safeVal}</span>
+            </div>`;
+        }).join('')
+      : '';
+
+    const legendHTML = rows
+      ? `<section class="legend">
+           <h2 class="legend__title">Résultats par couleur</h2>
+           ${rows}
+         </section>`
+      : '';
+
+    // Ouvrir l’onglet (référence une feuille CSS séparée)
+    const win = window.open();
+    if (win) {
+      win.document.write(`<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Export PNG — ${W}×${H}px</title>
+  <link rel="stylesheet" href="export.css">
+</head>
+<body class="export-root">
+  <p class="export-info">${W} × ${H} px (échelle 1:1)</p>
+  <img class="export-image" src="${dataURL}" width="${W}" height="${H}" alt="Grille exportée">
+  ${legendHTML}
+  <script>
+    // Colorer les pastilles depuis data-color (aucun style inline dans le HTML)
+    document.querySelectorAll('.legend__swatch').forEach(el => {
+      const c = el.getAttribute('data-color'); // "r,g,b"
+      if (c) el.style.background = 'rgb(' + c + ')';
+    });
+  </script>
+</body>
+</html>`);
+      win.document.close();
+    }
+  };
+
+  img.src = src;
 }
 
 /*********************************
