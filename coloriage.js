@@ -803,22 +803,30 @@ function openPNGInNewTab() {
     const dataURL = canvas.toDataURL('image/png');
 
     // Légende
-    const palette = Array.isArray(state.palette) ? state.palette : [];
-    const results = Array.isArray(state.customResults) ? state.customResults : [];
-    const rows = (palette.length && results.length)
-      ? palette.map((rgb, i) => {
-          const [r, g, b] = rgb;
-          const val = Math.max(1, Number(results[i] ?? (i + 2)));
-          const safeVal = Number.isFinite(val) ? val : '';
-          return `
-            <div class="legend__row">
-              <span class="legend__swatch" data-color="${r},${g},${b}"></span>
-              <span class="legend__name">Couleur ${i + 1}</span>
-              <span class="legend__sep">—</span>
-              <span class="legend__val">Résultat&nbsp;: ${safeVal}</span>
-            </div>`;
-        }).join('')
-      : '';
+const palette = Array.isArray(state.palette) ? state.palette : [];
+const results = Array.isArray(state.customResults) ? state.customResults : [];
+
+const rows = (palette.length && results.length)
+  ? palette.map((rgb, i) => {
+      const [r, g, b] = rgb;
+      const val = Math.max(1, Number(results[i] ?? (i + 2)));
+      const safeVal = Number.isFinite(val) ? val : '';
+      return `
+        <div class="legend__row">
+          <span class="legend__swatch" data-color="${r},${g},${b}"></span>
+          <span class="legend__eq">=</span>
+          <span class="legend__val">${safeVal}</span>
+        </div>`;
+    }).join('')
+  : '';
+
+const legendHTML = rows
+  ? `<section class="legend">
+       <h2 class="legend__title">Résultats par couleur</h2>
+       ${rows}
+     </section>`
+  : '';
+
 
     const legendHTML = rows
       ? `<section class="legend">
