@@ -802,31 +802,23 @@ function openPNGInNewTab() {
     ctx.drawImage(img, 0, 0, W, H);
     const dataURL = canvas.toDataURL('image/png');
 
-    // Légende
-const palette = Array.isArray(state.palette) ? state.palette : [];
-const results = Array.isArray(state.customResults) ? state.customResults : [];
+    // Légende (carré = résultat)
+    const palette = Array.isArray(state.palette) ? state.palette : [];
+    const results = Array.isArray(state.customResults) ? state.customResults : [];
 
-const rows = (palette.length && results.length)
-  ? palette.map((rgb, i) => {
-      const [r, g, b] = rgb;
-      const val = Math.max(1, Number(results[i] ?? (i + 2)));
-      const safeVal = Number.isFinite(val) ? val : '';
-      return `
-        <div class="legend__row">
-          <span class="legend__swatch" data-color="${r},${g},${b}"></span>
-          <span class="legend__eq">=</span>
-          <span class="legend__val">${safeVal}</span>
-        </div>`;
-    }).join('')
-  : '';
-
-const legendHTML = rows
-  ? `<section class="legend">
-       <h2 class="legend__title">Résultats par couleur</h2>
-       ${rows}
-     </section>`
-  : '';
-
+    const rows = (palette.length && results.length)
+      ? palette.map((rgb, i) => {
+          const [r, g, b] = rgb;
+          const val = Math.max(1, Number(results[i] ?? (i + 2)));
+          const safeVal = Number.isFinite(val) ? val : '';
+          return `
+            <div class="legend__row">
+              <span class="legend__swatch" data-color="${r},${g},${b}"></span>
+              <span class="legend__eq">=</span>
+              <span class="legend__val">${safeVal}</span>
+            </div>`;
+        }).join('')
+      : '';
 
     const legendHTML = rows
       ? `<section class="legend">
@@ -850,7 +842,7 @@ const legendHTML = rows
   <img class="export-image" src="${dataURL}" width="${W}" height="${H}" alt="Grille exportée">
   ${legendHTML}
   <script>
-    // Colorer les pastilles depuis data-color (aucun style inline dans le HTML)
+    // Colorer les pastilles depuis data-color (aucun style inline de mise en forme)
     document.querySelectorAll('.legend__swatch').forEach(el => {
       const c = el.getAttribute('data-color'); // "r,g,b"
       if (c) el.style.background = 'rgb(' + c + ')';
