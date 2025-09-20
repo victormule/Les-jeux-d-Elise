@@ -261,3 +261,34 @@ input[type="number"] { -moz-appearance: textfield; }
   font-weight: 700;
 }
 
+/* >>> REMPLACE ce bloc existant pour inputs/selects <<< */
+select,
+input[type="number"],
+input[type="text"],
+input[type="file"] {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+
+  /* crucial : couleurs liées au thème */
+  background: var(--card);
+  color: var(--fg);
+}
+
+/* placeholders lisibles */
+input[type="text"]::placeholder,
+input[type="number"]::placeholder {
+  color: var(--muted);
+}
+
+/* certains navigateurs mobiles (Safari iOS) */
+input, select {
+  -webkit-text-fill-color: currentColor; /* aligne la couleur du texte sur `color` */
+}
+
+/* optionnel : menus déroulants (Android/Safari) */
+select option {
+  background: var(--card);
+  color: var(--fg);
+}
+
